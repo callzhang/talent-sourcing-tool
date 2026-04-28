@@ -139,6 +139,9 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
           <h3>{activeJob?.job.title ?? "No JD selected"}</h3>
           <span>{activeJob ? `v${activeJob.rubric.version}` : "Draft"}</span>
         </div>
+        <JobDetail job={activeJob} />
+        <RubricPreview job={activeJob} />
+        <p className="section-kicker job-list-heading">All JDs</p>
         <div className="job-list">
           {jobs.map((job) => (
             <button
@@ -153,8 +156,35 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
             </button>
           ))}
         </div>
-        <RubricPreview job={activeJob} />
       </div>
+    </section>
+  );
+}
+
+function JobDetail({ job }: { job: JobWithRubric | null }) {
+  if (job === null) {
+    return null;
+  }
+
+  return (
+    <div className="job-detail">
+      <DetailBlock label="JD description" value={job.job.description} />
+      <DetailBlock label="Target profile" value={job.job.target_profile_text} />
+      <DetailBlock label="Red flags" value={job.job.red_flags_text} />
+      <DetailBlock label="Search notes" value={job.job.search_notes} />
+    </div>
+  );
+}
+
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  if (!value.trim()) {
+    return null;
+  }
+
+  return (
+    <section className="detail-block" aria-label={label}>
+      <p className="detail-label">{label}</p>
+      <p>{value}</p>
     </section>
   );
 }
@@ -170,9 +200,29 @@ function RubricPreview({ job }: { job: JobWithRubric | null }) {
         <article key={dimension.name} className="rubric-item">
           <strong>{dimension.name}</strong>
           {dimension.weight !== undefined ? <span>{dimension.weight}%</span> : null}
+          {dimension.description ? <p>{dimension.description}</p> : null}
           {dimension.scoring_guidance ? <p>{dimension.scoring_guidance}</p> : null}
+          {dimension.signals && dimension.signals.length > 0 ? (
+            <EvidenceList label="Signals" items={dimension.signals} />
+          ) : null}
+          {dimension.red_flags && dimension.red_flags.length > 0 ? (
+            <EvidenceList label="Red flags" items={dimension.red_flags} />
+          ) : null}
         </article>
       ))}
+    </div>
+  );
+}
+
+function EvidenceList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div>
+      <p className="detail-label">{label}</p>
+      <ul className="compact-list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }

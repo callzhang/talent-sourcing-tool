@@ -370,6 +370,10 @@ h3 {
   gap: 8px;
 }
 
+.job-list-heading {
+  margin-top: 22px;
+}
+
 .list-row,
 .rubric-item,
 .candidate-card,
@@ -418,10 +422,39 @@ h3 {
 }
 
 .rubric-list,
+.job-detail,
 .candidate-grid,
 .refinement-grid,
 .review-block {
   margin-top: 18px;
+}
+
+.job-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-block {
+  display: grid;
+  gap: 6px;
+  padding: 14px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.detail-block p:last-child {
+  margin-bottom: 0;
+  color: var(--color-text);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.detail-label {
+  margin: 0;
+  color: var(--color-neutral);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .rubric-item {

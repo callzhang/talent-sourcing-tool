@@ -43,6 +43,36 @@ it("loads existing jobs, selects the first one, and renders rubric details", asy
   expect(screen.getByText("Assess PMF discovery depth.")).toBeInTheDocument();
 });
 
+it("shows the selected JD details and rubric evidence fields", async () => {
+  const onSelectJob = vi.fn();
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/jobs")) {
+      return jsonResponse([jobWithDetails]);
+    }
+    if (url.endsWith("/api/jobs/job_1")) {
+      return jsonResponse(jobWithEvidenceRubric);
+    }
+    return jsonResponse(null);
+  });
+
+  render(
+    <JobsPage
+      selectedJobId="job_1"
+      onSelectJob={onSelectJob}
+      onCreatedJob={() => undefined}
+    />
+  );
+
+  expect(await screen.findByText("Build customer demos.")).toBeInTheDocument();
+  expect(screen.getByText("AI-native builder")).toBeInTheDocument();
+  expect(screen.getByText("No shipping evidence")).toBeInTheDocument();
+  expect(screen.getByText("Search for prototype builders")).toBeInTheDocument();
+  expect(screen.getByText("Matches the role context, domain, and target profile.")).toBeInTheDocument();
+  expect(screen.getByText("Evidence of customer-facing prototypes.")).toBeInTheDocument();
+  expect(screen.getByText("Only internal tooling.")).toBeInTheDocument();
+});
+
 it("creates a job, forwards it to the app shell, and clears the form", async () => {
   const onCreatedJob = vi.fn();
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -171,6 +201,13 @@ const job = {
   updated_at: "2026-04-28T12:00:00Z"
 };
 
+const jobWithDetails = {
+  ...job,
+  target_profile_text: "AI-native builder",
+  red_flags_text: "No shipping evidence",
+  search_notes: "Search for prototype builders"
+};
+
 const jobWithRubric = {
   job,
   rubric: {
@@ -184,6 +221,28 @@ const jobWithRubric = {
           name: "Founder-market judgment",
           weight: 45,
           scoring_guidance: "Assess PMF discovery depth."
+        }
+      ]
+    },
+    created_at: "2026-04-28T12:00:00Z",
+    updated_at: "2026-04-28T12:00:00Z"
+  }
+};
+
+const jobWithEvidenceRubric = {
+  job: jobWithDetails,
+  rubric: {
+    id: "rubric_2",
+    job_id: "job_1",
+    version: 1,
+    source_hash: "hash_2",
+    rubric: {
+      dimensions: [
+        {
+          name: "Role Fit",
+          description: "Matches the role context, domain, and target profile.",
+          signals: ["Evidence of customer-facing prototypes."],
+          red_flags: ["Only internal tooling."]
         }
       ]
     },

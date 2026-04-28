@@ -16,6 +16,9 @@ export type Job = {
 
 export type RubricDimension = {
   name: string;
+  description?: string;
+  signals?: string[];
+  red_flags?: string[];
   weight?: number;
   scoring_guidance?: string;
   must_have_evidence?: string[];
