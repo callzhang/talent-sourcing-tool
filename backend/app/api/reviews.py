@@ -12,13 +12,14 @@ from app.db.models import (
     CandidateDecision,
     Job,
     PassReason,
+    RefinementSuggestion,
     Review,
     ReviewJob,
     Rubric,
 )
 from app.db.session import get_session
 from app.schemas import DecisionCreate, ReviewStart
-from app.services.pass_reason import draft_pass_reason
+from app.services.pass_reason import draft_pass_reason, suggest_refinements
 from app.services.review_worker import ReviewWorker
 
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
@@ -142,6 +143,34 @@ def get_draft_pass_reason(review_id: str, session: Session = Depends(get_session
     return draft_pass_reason(review.raw_review)
 
 
+@router.get("/refinements")
+def list_refinement_suggestions(
+    job_id: str, session: Session = Depends(get_session)
+) -> list[dict[str, Any]]:
+    if session.get(Job, job_id) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    suggestions = session.exec(
+        select(RefinementSuggestion)
+        .where(RefinementSuggestion.job_id == job_id)
+        .order_by(RefinementSuggestion.created_at.desc())
+    ).all()
+    return [
+        {
+            "id": suggestion.id,
+            "job_id": suggestion.job_id,
+            "pass_reason_id": suggestion.pass_reason_id,
+            "suggestion_type": suggestion.suggestion_type,
+            "suggestion_text": suggestion.suggestion_text,
+            "status": suggestion.status,
+            "suggestion_metadata": suggestion.suggestion_metadata,
+            "created_at": suggestion.created_at,
+            "applied_at": suggestion.applied_at,
+        }
+        for suggestion in suggestions
+    ]
+
+
 @router.post("/decision")
 def create_decision(
     decision_create: DecisionCreate, session: Session = Depends(get_session)
@@ -166,15 +195,32 @@ def create_decision(
     session.add(decision)
     session.flush()
     if decision_create.decision == "pass":
-        session.add(
-            PassReason(
-                candidate_decision_id=decision.id,
-                reason_code=decision_create.pass_reason_code,
-                reason_text=decision_create.pass_reason_text or "",
-                agent_suggested=False,
-                user_edited=True,
-            )
+        pass_reason = PassReason(
+            candidate_decision_id=decision.id,
+            reason_code=decision_create.pass_reason_code,
+            reason_text=decision_create.pass_reason_text or "",
+            agent_suggested=False,
+            user_edited=True,
         )
+        session.add(pass_reason)
+        session.flush()
+        for suggestion in suggest_refinements(
+            [
+                {
+                    "reason_code": pass_reason.reason_code,
+                    "reason_text": pass_reason.reason_text,
+                }
+            ]
+        ):
+            session.add(
+                RefinementSuggestion(
+                    job_id=decision_create.job_id,
+                    pass_reason_id=pass_reason.id,
+                    suggestion_type=str(suggestion["suggestion_type"]),
+                    suggestion_text=str(suggestion["suggestion_text"]),
+                    suggestion_metadata={"reason_codes": suggestion.get("reason_codes", [])},
+                )
+            )
     session.commit()
 
     session.refresh(decision)

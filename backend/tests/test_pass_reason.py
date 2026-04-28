@@ -15,7 +15,7 @@ def test_draft_pass_reason_prioritizes_weak_builder_evidence():
     assert draft["evidence"] == ["No public evidence of shipping AI products"]
 
 
-def test_draft_pass_reason_identifies_enterprise_sales_orientation():
+def test_draft_pass_reason_does_not_route_from_risk_keywords():
     review = {
         "risks": ["Background is mostly enterprise sales leadership, not hands-on product work"],
         "dimension_scores": [{"name": "Founder / Builder Evidence", "score": 62}],
@@ -23,8 +23,7 @@ def test_draft_pass_reason_identifies_enterprise_sales_orientation():
 
     draft = draft_pass_reason(review)
 
-    assert draft["reason_code"] == "too_enterprise_sales_oriented"
-    assert "sales" in draft["reason_text"].lower()
+    assert draft["reason_code"] == "insufficient_public_evidence"
 
 
 def test_draft_pass_reason_identifies_insufficient_ai_native_signal():

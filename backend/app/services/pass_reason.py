@@ -42,20 +42,6 @@ def draft_pass_reason(review: Any) -> dict[str, Any]:
             "evidence": evidence,
         }
 
-    risk_blob = " ".join(risks).lower()
-    if "sales" in risk_blob and any(
-        marker in risk_blob for marker in ("enterprise", "gtm", "go-to-market", "account")
-    ):
-        return {
-            "reason_code": "too_enterprise_sales_oriented",
-            "reason_text": _reason_text(
-                "Too enterprise sales oriented",
-                "the strongest signals are enterprise sales or GTM-oriented rather than product-building",
-                evidence,
-            ),
-            "evidence": evidence,
-        }
-
     return {
         "reason_code": "insufficient_public_evidence",
         "reason_text": _reason_text(

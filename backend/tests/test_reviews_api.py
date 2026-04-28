@@ -6,7 +6,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, select
 
-from app.db.models import Candidate, CandidateDecision, Job, PassReason, Review, ReviewJob, Rubric
+from app.db.models import (
+    Candidate,
+    CandidateDecision,
+    Job,
+    PassReason,
+    RefinementSuggestion,
+    Review,
+    ReviewJob,
+    Rubric,
+)
 from app.db.session import create_db_engine, get_session
 from app.main import app
 from app.services.review_worker import ReviewWorkerResult
@@ -245,6 +254,93 @@ def test_pass_requires_pass_reason(client: TestClient, engine: Engine):
     with Session(engine) as session:
         assert session.exec(select(CandidateDecision)).all() == []
         assert session.exec(select(PassReason)).all() == []
+
+
+def test_pass_rejects_blank_pass_reason_text(client: TestClient, engine: Engine):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "decision": "pass",
+            "pass_reason_text": "   ",
+        },
+    )
+
+    assert response.status_code == 422
+
+    with Session(engine) as session:
+        assert session.exec(select(CandidateDecision)).all() == []
+        assert session.exec(select(PassReason)).all() == []
+
+
+def test_pass_decision_persists_pass_reason_and_refinement_suggestions(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "decision": "pass",
+            "notes": "Not enough direct build evidence.",
+            "decided_by": "test-user",
+            "pass_reason_code": "weak_builder_evidence",
+            "pass_reason_text": "No public evidence of shipping AI prototypes.",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["decision"] == "pass"
+    assert data["candidate_id"] == candidate_id
+
+    with Session(engine) as session:
+        decision = session.exec(select(CandidateDecision)).one()
+        pass_reason = session.exec(select(PassReason)).one()
+        suggestion = session.exec(select(RefinementSuggestion)).one()
+
+    assert decision.job_id == job_id
+    assert decision.candidate_id == candidate_id
+    assert decision.notes == "Not enough direct build evidence."
+    assert pass_reason.candidate_decision_id == decision.id
+    assert pass_reason.reason_code == "weak_builder_evidence"
+    assert pass_reason.reason_text == "No public evidence of shipping AI prototypes."
+    assert pass_reason.agent_suggested is False
+    assert pass_reason.user_edited is True
+    assert suggestion.job_id == job_id
+    assert suggestion.pass_reason_id == pass_reason.id
+    assert suggestion.suggestion_type == "rubric_adjustment"
+    assert suggestion.status == "pending"
+    assert suggestion.suggestion_metadata == {"reason_codes": ["weak_builder_evidence"]}
+
+
+def test_refinement_suggestions_endpoint_lists_persisted_suggestions(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "decision": "pass",
+            "pass_reason_code": "weak_builder_evidence",
+            "pass_reason_text": "No public evidence of shipping AI prototypes.",
+        },
+    )
+
+    response = client.get(f"/api/reviews/refinements?job_id={job_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["job_id"] == job_id
+    assert data[0]["suggestion_type"] == "rubric_adjustment"
 
 
 def test_proceed_decision_creates_candidate_decision(client: TestClient, engine: Engine):

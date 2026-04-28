@@ -83,6 +83,8 @@ class DecisionCreate(BaseModel):
     def validate_decision(self) -> "DecisionCreate":
         if self.decision not in {"pass", "proceed"}:
             raise ValueError("decision must be pass or proceed")
+        if self.pass_reason_text is not None:
+            self.pass_reason_text = self.pass_reason_text.strip()
         if self.decision == "pass" and not self.pass_reason_text:
             raise ValueError("pass_reason_text is required for pass decisions")
         return self
