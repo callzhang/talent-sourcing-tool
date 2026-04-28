@@ -104,15 +104,18 @@ it("renders job listings in the left pane and selected job detail in the right p
   expect(listingsPane.compareDocumentPosition(detailPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-it("creates a job, forwards it to the app shell, and clears the form", async () => {
+it("opens a blank form from New Job and saves a new job", async () => {
   const onCreatedJob = vi.fn();
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/jobs") && method === "GET") {
-      return jsonResponse([]);
+      return jsonResponse([job]);
     }
     if (url.endsWith("/api/jobs") && method === "POST") {
+      return jsonResponse(jobWithRubric);
+    }
+    if (url.endsWith("/api/jobs/job_1")) {
       return jsonResponse(jobWithRubric);
     }
     return jsonResponse(null);
@@ -120,13 +123,17 @@ it("creates a job, forwards it to the app shell, and clears the form", async () 
 
   render(
     <JobsPage
-      selectedJobId={null}
+      selectedJobId="job_1"
       onSelectJob={() => undefined}
       onCreatedJob={onCreatedJob}
     />
   );
 
-  fireEvent.change(await screen.findByLabelText("JD title"), {
+  fireEvent.click(await screen.findByRole("button", { name: "New Job" }));
+  expect(screen.getByRole("heading", { name: "Job draft" })).toBeInTheDocument();
+  expect(screen.queryByText("Founder-market judgment")).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("JD title"), {
     target: { value: "AI Product Engineer" }
   });
   fireEvent.change(screen.getByLabelText("JD description"), {
@@ -146,11 +153,10 @@ it("creates a job, forwards it to the app shell, and clears the form", async () 
   });
   fireEvent.click(screen.getByLabelText("OpenReview"));
   fireEvent.click(screen.getByLabelText("arXiv"));
-  fireEvent.click(screen.getByRole("button", { name: "Create JD and rubric" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save Job" }));
 
   expect(await screen.findByText("JD created and rubric generated.")).toBeInTheDocument();
   expect(onCreatedJob).toHaveBeenCalledWith(jobWithRubric);
-  expect(screen.getByLabelText("JD title")).toHaveValue("");
   expect(screen.getByText("Founder-market judgment")).toBeInTheDocument();
 });
 
@@ -169,13 +175,14 @@ it("shows API errors from loading and creating jobs", async () => {
 
   expect(await screen.findByText("GET /api/jobs failed with 500: Unable to load jobs.")).toBeInTheDocument();
 
+  fireEvent.click(screen.getByRole("button", { name: "New Job" }));
   fireEvent.change(screen.getByLabelText("JD title"), {
     target: { value: "Broken JD" }
   });
   fireEvent.change(screen.getByLabelText("JD description"), {
     target: { value: "Broken description" }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create JD and rubric" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save Job" }));
 
   expect(await screen.findByText("POST /api/jobs failed with 500: Unable to create JD.")).toBeInTheDocument();
 });
@@ -223,6 +230,31 @@ it("selects a listed job when the user clicks it", async () => {
 
   fireEvent.click(await screen.findByRole("button", { name: /AI Product Engineer/ }));
   expect(onSelectJob).toHaveBeenCalledWith("job_1");
+});
+
+it("keeps the detail pane empty until New Job is chosen when no job is selected", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/jobs")) {
+      return jsonResponse([job]);
+    }
+    return jsonResponse(null);
+  });
+
+  render(
+    <JobsPage
+      selectedJobId={null}
+      onSelectJob={() => undefined}
+      onCreatedJob={() => undefined}
+    />
+  );
+
+  expect(await screen.findByText("No JD selected")).toBeInTheDocument();
+  expect(screen.queryByLabelText("JD title")).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "New Job" }));
+  expect(screen.getByLabelText("JD title")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save Job" })).toBeInTheDocument();
 });
 
 const job = {

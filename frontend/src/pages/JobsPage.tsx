@@ -21,6 +21,7 @@ type JobsPageProps = {
 export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageProps) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [activeJob, setActiveJob] = useState<JobWithRubric | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [region, setRegion] = useState("");
@@ -70,6 +71,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
       .getJob(selectedJobId)
       .then((job) => {
         if (!ignore) {
+          setIsCreating(false);
           setActiveJob(job);
         }
       })
@@ -99,14 +101,8 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
       });
       setJobs((current) => [created.job, ...current.filter((job) => job.id !== created.job.id)]);
       setActiveJob(created);
+      setIsCreating(false);
       onCreatedJob(created);
-      setTitle("");
-      setDescription("");
-      setRegion("");
-      setTargetProfile("");
-      setRedFlags("");
-      setSearchNotes("");
-      setSearchChannels(["linkedin", "github", "exa", "brightdata_discover"]);
       setStatus("JD created and rubric generated.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to create JD.");
@@ -119,7 +115,12 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
     <div className="jobs-grid">
       <section className="card job-list-pane" aria-label="Job listings">
         <p className="section-kicker">Jobs</p>
-        <h2 id="jobs-heading">Job listings</h2>
+        <div className="split-heading">
+          <h2 id="jobs-heading">Job listings</h2>
+          <button type="button" className="secondary-action" onClick={startNewJob}>
+            New Job
+          </button>
+        </div>
         <p className="muted">{status}</p>
         <div className="job-list">
           {jobs.map((job) => (
@@ -137,61 +138,55 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
       </section>
 
       <section className="card job-detail-pane" aria-label="Job detail">
-        <p className="section-kicker">Active rubric</p>
-        <div className="split-heading">
-          <h3>{activeJob?.job.title ?? "No JD selected"}</h3>
-          <span>{activeJob ? `v${activeJob.rubric.version}` : "Draft"}</span>
-        </div>
-        <JobDetail job={activeJob} />
-        <RubricPreview job={activeJob} />
-        <section className="create-job-panel" aria-labelledby="create-job-heading">
-          <p className="section-kicker">JD intake</p>
-          <h2 id="create-job-heading">JD Management</h2>
-          <form className="stack" onSubmit={handleSubmit}>
-            <label>
-              JD title
-              <input value={title} onChange={(event) => setTitle(event.target.value)} required />
-            </label>
-            <label>
-              JD description
-              <textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                required
-                rows={5}
-              />
-            </label>
-            <label>
-              Region
-              <input value={region} onChange={(event) => setRegion(event.target.value)} />
-            </label>
-            <label>
-              Target profile
-              <textarea
-                value={targetProfile}
-                onChange={(event) => setTargetProfile(event.target.value)}
-              />
-            </label>
-            <label>
-              Red flags
-              <textarea value={redFlags} onChange={(event) => setRedFlags(event.target.value)} />
-            </label>
-            <label>
-              Search notes
-              <textarea
-                value={searchNotes}
-                onChange={(event) => setSearchNotes(event.target.value)}
-              />
-            </label>
-            <SearchChannelField value={searchChannels} onChange={setSearchChannels} />
-            <button className="primary-action" type="submit" disabled={isSaving}>
-              Create JD and rubric
-            </button>
-          </form>
-        </section>
+        {isCreating ? (
+          <section aria-labelledby="create-job-heading">
+            <p className="section-kicker">New job</p>
+            <h2 id="create-job-heading">Job draft</h2>
+            <JobForm
+              title={title}
+              description={description}
+              region={region}
+              targetProfile={targetProfile}
+              redFlags={redFlags}
+              searchNotes={searchNotes}
+              searchChannels={searchChannels}
+              isSaving={isSaving}
+              onTitleChange={setTitle}
+              onDescriptionChange={setDescription}
+              onRegionChange={setRegion}
+              onTargetProfileChange={setTargetProfile}
+              onRedFlagsChange={setRedFlags}
+              onSearchNotesChange={setSearchNotes}
+              onSearchChannelsChange={setSearchChannels}
+              onSubmit={handleSubmit}
+            />
+          </section>
+        ) : (
+          <>
+            <p className="section-kicker">Active rubric</p>
+            <div className="split-heading">
+              <h3>{activeJob?.job.title ?? "No JD selected"}</h3>
+              <span>{activeJob ? `v${activeJob.rubric.version}` : "Draft"}</span>
+            </div>
+            <JobDetail job={activeJob} />
+            <RubricPreview job={activeJob} />
+          </>
+        )}
       </section>
     </div>
   );
+
+  function startNewJob() {
+    setIsCreating(true);
+    setActiveJob(null);
+    setTitle("");
+    setDescription("");
+    setRegion("");
+    setTargetProfile("");
+    setRedFlags("");
+    setSearchNotes("");
+    setSearchChannels(["linkedin", "github", "exa", "brightdata_discover"]);
+  }
 }
 
 function JobDetail({ job }: { job: JobWithRubric | null }) {
@@ -226,7 +221,7 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
 
 function RubricPreview({ job }: { job: JobWithRubric | null }) {
   if (job === null) {
-    return <p className="empty-state">Create or select a JD to see rubric dimensions.</p>;
+    return <p className="empty-state">Select a JD to see rubric dimensions.</p>;
   }
 
   return (
@@ -246,6 +241,85 @@ function RubricPreview({ job }: { job: JobWithRubric | null }) {
         </article>
       ))}
     </div>
+  );
+}
+
+type JobFormProps = {
+  title: string;
+  description: string;
+  region: string;
+  targetProfile: string;
+  redFlags: string;
+  searchNotes: string;
+  searchChannels: SearchChannel[];
+  isSaving: boolean;
+  onTitleChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onRegionChange: (value: string) => void;
+  onTargetProfileChange: (value: string) => void;
+  onRedFlagsChange: (value: string) => void;
+  onSearchNotesChange: (value: string) => void;
+  onSearchChannelsChange: (value: SearchChannel[]) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+};
+
+function JobForm({
+  title,
+  description,
+  region,
+  targetProfile,
+  redFlags,
+  searchNotes,
+  searchChannels,
+  isSaving,
+  onTitleChange,
+  onDescriptionChange,
+  onRegionChange,
+  onTargetProfileChange,
+  onRedFlagsChange,
+  onSearchNotesChange,
+  onSearchChannelsChange,
+  onSubmit
+}: JobFormProps) {
+  return (
+    <form className="stack" onSubmit={onSubmit}>
+      <label>
+        JD title
+        <input value={title} onChange={(event) => onTitleChange(event.target.value)} required />
+      </label>
+      <label>
+        JD description
+        <textarea
+          value={description}
+          onChange={(event) => onDescriptionChange(event.target.value)}
+          required
+          rows={5}
+        />
+      </label>
+      <label>
+        Region
+        <input value={region} onChange={(event) => onRegionChange(event.target.value)} />
+      </label>
+      <label>
+        Target profile
+        <textarea
+          value={targetProfile}
+          onChange={(event) => onTargetProfileChange(event.target.value)}
+        />
+      </label>
+      <label>
+        Red flags
+        <textarea value={redFlags} onChange={(event) => onRedFlagsChange(event.target.value)} />
+      </label>
+      <label>
+        Search notes
+        <textarea value={searchNotes} onChange={(event) => onSearchNotesChange(event.target.value)} />
+      </label>
+      <SearchChannelField value={searchChannels} onChange={onSearchChannelsChange} />
+      <button className="primary-action" type="submit" disabled={isSaving}>
+        Save Job
+      </button>
+    </form>
   );
 }
 

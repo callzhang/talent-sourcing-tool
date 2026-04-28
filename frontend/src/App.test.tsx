@@ -15,7 +15,8 @@ it("renders the app shell on the jobs tab", () => {
   expect(screen.getByRole("banner")).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Talent Sourcing Tool" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "JD Management" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Job listings" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "New Job" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Jobs" })).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -76,13 +77,14 @@ it("creates a job, displays its rubric, and uses it for search and candidates", 
 
   render(<App />);
 
+  fireEvent.click(screen.getByRole("button", { name: "New Job" }));
   fireEvent.change(await screen.findByLabelText("JD title"), {
     target: { value: "Founding PMM" }
   });
   fireEvent.change(screen.getByLabelText("JD description"), {
     target: { value: "Own positioning for AI launch." }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create JD and rubric" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save Job" }));
 
   expect(await screen.findByText("Founder-market judgment")).toBeInTheDocument();
 
