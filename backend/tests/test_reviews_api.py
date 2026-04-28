@@ -112,6 +112,51 @@ def test_start_review_stores_review_and_completed_review_job(
     assert review.score == 8.5
 
 
+def test_start_review_marks_job_failed_when_worker_output_breaks_persistence(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    def fake_run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        input_path = workspace / "input.json"
+        output_path = workspace / "review.json"
+        return ReviewWorkerResult(
+            workspace=workspace,
+            input_path=input_path,
+            output_path=output_path,
+            review={
+                "candidate_id": payload["candidate"]["id"],
+                "job_id": payload["job"]["id"],
+                "overall_score": "not-a-number",
+                "recommendation": "proceed",
+                "decision_summary": "Invalid score should fail persistence.",
+            },
+        )
+
+    from app.api import reviews
+
+    monkeypatch.setattr(reviews.ReviewWorker, "run_review", fake_run_review)
+
+    response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert response.status_code == 502
+    assert "not-a-number" in response.json()["detail"]
+
+    with Session(engine) as session:
+        review_job = session.exec(select(ReviewJob)).one()
+        saved_reviews = session.exec(select(Review)).all()
+
+    assert review_job.status == "failed"
+    assert review_job.error_message is not None
+    assert "not-a-number" in review_job.error_message
+    assert saved_reviews == []
+
+
 def test_pass_requires_pass_reason(client: TestClient, engine: Engine):
     job_id, candidate_id = seed_review_inputs(engine)
 
@@ -159,4 +204,3 @@ def test_proceed_decision_creates_candidate_decision(client: TestClient, engine:
     assert decision.notes == "Move to recruiter screen."
     assert decision.decided_by == "test-user"
     assert pass_reasons == []
-

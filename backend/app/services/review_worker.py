@@ -6,7 +6,9 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, ValidationError
 
 
 REQUIRED_REVIEW_FIELDS = {
@@ -16,6 +18,22 @@ REQUIRED_REVIEW_FIELDS = {
     "recommendation",
     "decision_summary",
 }
+
+
+class ReviewOutput(BaseModel):
+    candidate_id: str
+    job_id: str
+    overall_score: float
+    recommendation: Literal["strong_proceed", "proceed", "borderline", "pass"]
+    decision_summary: str
+    dimension_scores: list[Any] = Field(default_factory=list)
+    strengths: list[Any] = Field(default_factory=list)
+    risks: list[Any] = Field(default_factory=list)
+    evidence: list[Any] = Field(default_factory=list)
+    sources: list[Any] = Field(default_factory=list)
+    suggested_interview_questions: list[Any] = Field(default_factory=list)
+    uncertainties: list[Any] = Field(default_factory=list)
+    review_notes: str = ""
 
 
 @dataclass(frozen=True)
@@ -49,8 +67,19 @@ class ReviewWorker:
                         "candidate_id": {"type": "string"},
                         "job_id": {"type": "string"},
                         "overall_score": {"type": "number"},
-                        "recommendation": {"type": "string"},
+                        "recommendation": {
+                            "type": "string",
+                            "enum": ["strong_proceed", "proceed", "borderline", "pass"],
+                        },
                         "decision_summary": {"type": "string"},
+                        "dimension_scores": {"type": "array"},
+                        "strengths": {"type": "array"},
+                        "risks": {"type": "array"},
+                        "evidence": {"type": "array"},
+                        "sources": {"type": "array"},
+                        "suggested_interview_questions": {"type": "array"},
+                        "uncertainties": {"type": "array"},
+                        "review_notes": {"type": "string"},
                     },
                 },
                 indent=2,
@@ -82,11 +111,14 @@ class ReviewWorker:
         missing_fields = sorted(REQUIRED_REVIEW_FIELDS.difference(review))
         if missing_fields:
             raise RuntimeError(f"Review output missing required fields: {', '.join(missing_fields)}")
+        try:
+            validated_review = ReviewOutput.model_validate(review)
+        except ValidationError as exc:
+            raise RuntimeError(f"Invalid review output: {exc}") from exc
 
         return ReviewWorkerResult(
             workspace=workspace,
             input_path=input_path,
             output_path=output_path,
-            review=review,
+            review=validated_review.model_dump(),
         )
-

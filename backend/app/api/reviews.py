@@ -101,25 +101,29 @@ def start_review(
         mark_review_job_failed(session, review_job.id, str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    review_data = worker_result.review
-    review = Review(
-        review_job_id=review_job.id,
-        summary=str(review_data["decision_summary"]),
-        evidence=review_data.get("evidence", []),
-        recommendation=str(review_data["recommendation"]),
-        score=float(review_data["overall_score"]),
-        raw_review=review_data,
-    )
-    review_job.status = "completed"
-    review_job.workspace_path = str(worker_result.workspace)
-    review_job.input_path = str(worker_result.input_path)
-    review_job.output_path = str(worker_result.output_path)
-    review_job.completed_at = datetime.now(UTC)
-    session.add(review_job)
-    session.add(review)
-    session.commit()
-    session.refresh(review_job)
-    session.refresh(review)
+    try:
+        review_data = worker_result.review
+        review = Review(
+            review_job_id=review_job.id,
+            summary=str(review_data["decision_summary"]),
+            evidence=review_data.get("evidence", []),
+            recommendation=str(review_data["recommendation"]),
+            score=float(review_data["overall_score"]),
+            raw_review=review_data,
+        )
+        review_job.status = "completed"
+        review_job.workspace_path = str(worker_result.workspace)
+        review_job.input_path = str(worker_result.input_path)
+        review_job.output_path = str(worker_result.output_path)
+        review_job.completed_at = datetime.now(UTC)
+        session.add(review_job)
+        session.add(review)
+        session.commit()
+        session.refresh(review_job)
+        session.refresh(review)
+    except Exception as exc:
+        mark_review_job_failed(session, review_job.id, str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return {
         "review_job_id": review_job.id,

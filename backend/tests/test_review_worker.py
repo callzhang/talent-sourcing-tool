@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from app.services.review_worker import ReviewWorker
 
 
@@ -43,3 +45,40 @@ payload = json.loads((workspace / "input.json").read_text())
     assert saved_input["candidate_id"] == "candidate_123"
     assert saved_input["job_id"] == "job_123"
 
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("overall_score", "not-a-number"),
+        ("recommendation", "hire_immediately"),
+    ],
+)
+def test_review_worker_rejects_invalid_review_output(
+    tmp_path: Path, field: str, value: object
+):
+    fake_codex = tmp_path / "fake_codex.py"
+    review = {
+        "candidate_id": "candidate_123",
+        "job_id": "job_123",
+        "overall_score": 8.5,
+        "recommendation": "proceed",
+        "decision_summary": "Strong match for the role.",
+    }
+    review[field] = value
+    fake_codex.write_text(
+        f"""
+import json
+import sys
+from pathlib import Path
+
+workspace = Path(sys.argv[-1])
+(workspace / "review.json").write_text(json.dumps({review!r}))
+""".strip()
+    )
+    worker = ReviewWorker(codex_command=["python", str(fake_codex)], workspace_root=tmp_path)
+
+    with pytest.raises(RuntimeError, match="Invalid review output"):
+        worker.run_review(
+            "review_job_123",
+            {"candidate_id": "candidate_123", "job_id": "job_123"},
+        )
