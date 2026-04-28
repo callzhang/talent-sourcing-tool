@@ -1,3 +1,5 @@
+import pytest
+
 from app.services.pass_reason import draft_pass_reason, suggest_refinements
 
 
@@ -42,6 +44,46 @@ def test_draft_pass_reason_falls_back_to_public_evidence_gap():
 
     assert draft["reason_code"] == "insufficient_public_evidence"
     assert draft["evidence"] == []
+
+
+@pytest.mark.parametrize(
+    "review",
+    [
+        None,
+        [],
+        "x",
+        {"risks": None},
+        {"dimension_scores": None},
+    ],
+)
+def test_draft_pass_reason_handles_malformed_review_shapes(review):
+    draft = draft_pass_reason(review)
+
+    assert draft["reason_code"] == "insufficient_public_evidence"
+    assert draft["evidence"] == []
+
+
+def test_draft_pass_reason_filters_evidence_to_user_facing_scalars():
+    review = {
+        "risks": [
+            None,
+            {"detail": "hidden object"},
+            "Visible risk",
+            123,
+            True,
+        ],
+        "uncertainties": [
+            "Unclear AI depth",
+            {"detail": "hidden uncertainty"},
+            False,
+        ],
+        "dimension_scores": None,
+    }
+
+    draft = draft_pass_reason(review)
+
+    assert draft["reason_code"] == "insufficient_public_evidence"
+    assert draft["evidence"] == ["Visible risk", "123", "True", "Unclear AI depth", "False"]
 
 
 def test_suggest_refinements_mentions_search_query():

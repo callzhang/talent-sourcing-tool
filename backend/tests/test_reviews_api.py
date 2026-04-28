@@ -195,6 +195,39 @@ def test_draft_pass_reason_endpoint_404s_for_missing_review(client: TestClient):
     assert response.json()["detail"] == "Review not found"
 
 
+def test_draft_pass_reason_endpoint_handles_malformed_raw_review(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        review_job = ReviewJob(job_id=job_id, candidate_id=candidate_id, status="completed")
+        session.add(review_job)
+        session.commit()
+        session.refresh(review_job)
+        review = Review(
+            review_job_id=review_job.id,
+            summary="Malformed review.",
+            evidence=[],
+            recommendation="pass",
+            score=4.0,
+            raw_review={
+                "risks": [None, {"detail": "hidden object"}, "Visible risk"],
+                "dimension_scores": None,
+            },
+        )
+        session.add(review)
+        session.commit()
+        session.refresh(review)
+        review_id = review.id
+
+    response = client.get(f"/api/reviews/{review_id}/draft-pass-reason")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["reason_code"] == "insufficient_public_evidence"
+    assert data["evidence"] == ["Visible risk"]
+
+
 def test_pass_requires_pass_reason(client: TestClient, engine: Engine):
     job_id, candidate_id = seed_review_inputs(engine)
 

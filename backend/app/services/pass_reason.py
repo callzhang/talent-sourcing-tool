@@ -7,16 +7,18 @@ from typing import Any
 LOW_SCORE_THRESHOLD = 50
 
 
-def draft_pass_reason(review: dict[str, Any]) -> dict[str, Any]:
+def draft_pass_reason(review: Any) -> dict[str, Any]:
     """Draft a pass reason from review dimensions and stated risks.
 
     Rules deliberately combine structured dimension scores with review risks:
     dimensions identify the rubric area that underperformed, while risks provide
     candidate-specific evidence and language for the drafted explanation.
     """
-    risks = _risk_texts(review)
-    low_dimensions = _low_dimension_names(review)
-    evidence = risks
+    normalized_review = _review_dict(review)
+    risks = _evidence_texts(normalized_review, "risks")
+    uncertainties = _evidence_texts(normalized_review, "uncertainties")
+    low_dimensions = _low_dimension_names(normalized_review)
+    evidence = [*risks, *uncertainties]
 
     if _has_dimension_signal(low_dimensions, ("builder", "founder", "shipping")):
         return {
@@ -110,18 +112,52 @@ def suggest_refinements(pass_reasons: list[dict[str, Any]]) -> list[dict[str, An
     return suggestions
 
 
-def _risk_texts(review: dict[str, Any]) -> list[str]:
-    return [str(risk) for risk in review.get("risks", []) if str(risk).strip()]
+def _review_dict(review: Any) -> dict[str, Any]:
+    if isinstance(review, dict):
+        return review
+    return {}
+
+
+def _list_value(review: dict[str, Any], key: str) -> list[Any]:
+    value = review.get(key, [])
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _evidence_texts(review: dict[str, Any], key: str) -> list[str]:
+    evidence: list[str] = []
+    for value in _list_value(review, key):
+        text = _safe_scalar_text(value)
+        if text:
+            evidence.append(text)
+    return evidence
+
+
+def _safe_scalar_text(value: Any) -> str | None:
+    if value is None or isinstance(value, dict | list | tuple | set):
+        return None
+    if isinstance(value, str | int | float | bool):
+        text = str(value).strip()
+        if text:
+            return text
+    return None
 
 
 def _low_dimension_names(review: dict[str, Any]) -> list[str]:
     low_dimensions: list[str] = []
-    for dimension in review.get("dimension_scores", []):
+    for dimension in _list_value(review, "dimension_scores"):
         if not isinstance(dimension, dict):
             continue
         score = dimension.get("score")
-        name = str(dimension.get("name", "")).lower()
-        if isinstance(score, int | float) and score < LOW_SCORE_THRESHOLD and name:
+        name = _safe_scalar_text(dimension.get("name"))
+        if (
+            isinstance(score, int | float)
+            and not isinstance(score, bool)
+            and score < LOW_SCORE_THRESHOLD
+            and name
+        ):
+            name = name.lower()
             low_dimensions.append(name)
     return low_dimensions
 
