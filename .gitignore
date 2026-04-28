@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+dist/
+build/
+node_modules/
+*.db
+*.sqlite
+*.sqlite3
+.codex-review-runs/
+review-workspaces/
+coverage/
+.DS_Store
