@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { CandidatesPage } from "./CandidatesPage";
@@ -54,12 +54,66 @@ it("loads searched candidates and sends selected candidate to review", async () 
     />
   );
 
-  expect(screen.getByText("Rank 2")).toBeInTheDocument();
-  expect(screen.getByText("No headline captured")).toBeInTheDocument();
-  expect(screen.getByText("LaunchCo · Remote")).toBeInTheDocument();
+  const detailPane = screen.getByRole("region", { name: "Candidate detail" });
+  expect(within(detailPane).getByText("Rank 2")).toBeInTheDocument();
+  expect(within(detailPane).getByText("No headline captured")).toBeInTheDocument();
+  expect(within(detailPane).getByText("LaunchCo · Remote")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Review Candidate One" }));
   expect(onReviewCandidate).toHaveBeenCalledWith(candidate);
+});
+
+it("renders candidate listings in the left pane and selected candidate details in the right pane", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => jsonResponse([candidateWithEvidence]));
+
+  render(
+    <CandidatesPage
+      selectedJobId="job_1"
+      jobs={[job]}
+      candidates={[candidateWithEvidence]}
+      onSelectJob={() => undefined}
+      onLoadedCandidates={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  const queuePane = await screen.findByRole("region", { name: "Candidate listings" });
+  const detailPane = await screen.findByRole("region", { name: "Candidate detail" });
+
+  expect(queuePane).toContainElement(within(queuePane).getByRole("button", { name: /Candidate One/ }));
+  expect(detailPane).toContainElement(screen.getByText("Evidence of structured PMF interviews."));
+  expect(detailPane).toContainElement(screen.getByText("Portfolio source"));
+  expect(queuePane.compareDocumentPosition(detailPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("defaults to the job for the latest candidate when the selected JD has no candidates", async () => {
+  const onSelectJob = vi.fn();
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/candidates?job_id=job_1")) {
+      return jsonResponse([]);
+    }
+    if (url.endsWith("/api/candidates")) {
+      return jsonResponse([candidate]);
+    }
+    if (url.endsWith("/api/search/search_run_1")) {
+      return jsonResponse(searchRunForPmmJob);
+    }
+    return jsonResponse([]);
+  });
+
+  render(
+    <CandidatesPage
+      selectedJobId="job_1"
+      jobs={[job, pmmJob]}
+      candidates={[]}
+      onSelectJob={onSelectJob}
+      onLoadedCandidates={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  await waitFor(() => expect(onSelectJob).toHaveBeenCalledWith("job_pmm"));
 });
 
 it("renders empty and error states for candidate loading", async () => {
@@ -171,7 +225,38 @@ const candidate: Candidate = {
   profile_data: {},
   created_at: "2026-04-28T12:00:00Z",
   updated_at: "2026-04-28T12:00:00Z",
+  last_search_run_id: "search_run_1",
   last_search_rank: 2
+};
+
+const candidateWithEvidence: Candidate = {
+  ...candidate,
+  profile_data: {
+    raw: {
+      signals: ["Evidence of structured PMF interviews."],
+      risks: ["Availability needs confirmation."],
+      sources: [
+        {
+          title: "Portfolio source",
+          url: "https://example.com/profile",
+          evidence: "Shows product discovery artifacts."
+        }
+      ]
+    }
+  }
+};
+
+const searchRunForPmmJob = {
+  id: "search_run_1",
+  job_id: "job_pmm",
+  query: "Founding PMM",
+  provider: "verified_public_web",
+  status: "completed",
+  params: {},
+  candidate_count: 1,
+  created_at: "2026-04-28T12:00:00Z",
+  completed_at: "2026-04-28T12:00:00Z",
+  candidates: [candidate]
 };
 
 function jsonResponse(body: unknown) {

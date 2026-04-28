@@ -301,7 +301,8 @@ h3 {
   margin-top: 24px;
 }
 
-.jobs-grid {
+.jobs-grid,
+.candidates-grid {
   display: grid;
   grid-template-columns: minmax(260px, 0.45fr) minmax(0, 1fr);
   gap: 24px;
@@ -309,7 +310,8 @@ h3 {
   align-items: start;
 }
 
-.job-list-pane {
+.job-list-pane,
+.candidate-list-pane {
   position: sticky;
   top: 96px;
   max-height: calc(100vh - 120px);
@@ -317,9 +319,22 @@ h3 {
 }
 
 .job-detail-pane,
+.candidate-detail-pane,
 .create-job-panel {
   display: grid;
   gap: 18px;
+}
+
+.candidate-list,
+.candidate-detail,
+.source-list {
+  display: grid;
+  gap: 12px;
+}
+
+.candidate-list-row span {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
 }
 
 .create-job-panel {
@@ -527,12 +542,14 @@ h3 {
 
   .app-nav,
   .jobs-grid,
+  .candidates-grid,
   .workspace-grid,
   .detail-grid {
     grid-template-columns: 1fr;
   }
 
-  .job-list-pane {
+  .job-list-pane,
+  .candidate-list-pane {
     position: static;
     max-height: none;
   }
