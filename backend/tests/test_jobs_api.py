@@ -104,6 +104,24 @@ def test_create_job_defaults_channels_from_role_family(client: TestClient):
     ]
 
 
+def test_create_job_strips_us_frontier_team_prefix(client: TestClient, engine: Engine):
+    response = client.post(
+        "/api/jobs",
+        json={
+            "title": "US Frontier Team - Founding PMM / PMF Discovery Lead",
+            "description": "Own PMF discovery.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["job"]["title"] == "Founding PMM / PMF Discovery Lead"
+
+    with Session(engine) as session:
+        job = session.exec(select(Job)).one()
+
+    assert job.title == "Founding PMM / PMF Discovery Lead"
+
+
 def test_create_job_rolls_back_when_rubric_insert_fails(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
 ):
@@ -240,7 +258,7 @@ def test_list_jobs_collapses_us_frontier_team_title_prefix(client: TestClient, e
     response = client.get("/api/jobs")
 
     assert response.status_code == 200
-    assert [job["title"] for job in response.json()] == ["US Frontier Team - AI Product Engineer"]
+    assert [job["title"] for job in response.json()] == ["AI Product Engineer"]
 
 
 def test_create_job_reuses_existing_job_with_us_frontier_team_prefix(client: TestClient):

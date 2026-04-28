@@ -5,6 +5,7 @@ from sqlmodel import SQLModel
 
 from app.db import models  # noqa: F401
 from app.db.session import engine
+from app.services.job_titles import normalize_job_title
 from app.services.sourcing import default_job_search_channels, normalize_search_channels
 
 
@@ -55,6 +56,7 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
             text("SELECT id, title, description, search_channels FROM job")
         ).all()
         for job_id, title, description, search_channels in existing_jobs:
+            normalized_title = normalize_job_title(title)
             parsed_channels = (
                 json.loads(search_channels)
                 if isinstance(search_channels, str) and search_channels
@@ -64,11 +66,12 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
             if "brightdata_discover" not in normalized_channels:
                 normalized_channels.append("brightdata_discover")
             if not normalized_channels:
-                normalized_channels = default_job_search_channels(title, description)
+                normalized_channels = default_job_search_channels(normalized_title, description)
             connection.execute(
-                text("UPDATE job SET search_channels = :search_channels WHERE id = :job_id"),
+                text("UPDATE job SET title = :title, search_channels = :search_channels WHERE id = :job_id"),
                 {
                     "job_id": job_id,
+                    "title": normalized_title,
                     "search_channels": json.dumps(normalized_channels),
                 },
             )

@@ -201,6 +201,59 @@ def test_migrate_existing_sqlite_schema_is_idempotent(tmp_path: Path):
     assert review_job_columns.count("input_path") == 1
 
 
+def test_migrate_existing_sqlite_schema_normalizes_job_titles(tmp_path: Path):
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'normalized-titles.sqlite3'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE job (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    title VARCHAR NOT NULL,
+                    description VARCHAR NOT NULL,
+                    status VARCHAR NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE reviewjob (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    job_id VARCHAR NOT NULL,
+                    candidate_id VARCHAR NOT NULL,
+                    status VARCHAR NOT NULL,
+                    workspace_path VARCHAR,
+                    error_message VARCHAR,
+                    created_at DATETIME NOT NULL,
+                    started_at DATETIME,
+                    completed_at DATETIME
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO job
+                (id, title, description, status, created_at, updated_at)
+                VALUES
+                ('job_1', 'US Frontier Team - Founding PMM / PMF Discovery Lead', 'Own PMF discovery.', 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """
+            )
+        )
+
+    migrate_existing_sqlite_schema(engine)
+
+    with engine.begin() as connection:
+        row = connection.execute(text("SELECT title FROM job WHERE id = 'job_1'")).scalar_one()
+
+    assert row == "Founding PMM / PMF Discovery Lead"
+
+
 def test_migrate_existing_sqlite_schema_backfills_search_run_channels(tmp_path: Path):
     engine = create_db_engine(f"sqlite:///{tmp_path / 'legacy-runs.sqlite3'}")
     with engine.begin() as connection:

@@ -8,18 +8,11 @@ from sqlmodel import Session, select
 from app.db.models import Job, Rubric
 from app.db.session import get_session
 from app.schemas import JobCreate, JobRead, JobWithRubric, RubricRead
+from app.services.job_titles import job_title_key, normalize_job_title
 from app.services.rubric import rubric_to_json
 from app.services.sourcing import default_job_search_channels, normalize_search_channels
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
-
-
-def job_title_key(title: str) -> str:
-    normalized_title = " ".join(title.casefold().split())
-    prefix = "us frontier team - "
-    if normalized_title.startswith(prefix):
-        return normalized_title.removeprefix(prefix)
-    return normalized_title
 
 
 def read_rubric(rubric: Rubric) -> RubricRead:
@@ -35,9 +28,14 @@ def read_rubric(rubric: Rubric) -> RubricRead:
     )
 
 
+def read_job(job: Job) -> JobRead:
+    return JobRead.model_validate(job.model_copy(update={"title": normalize_job_title(job.title)}))
+
+
 @router.post("", response_model=JobWithRubric)
 def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -> JobWithRubric:
-    title_key = job_title_key(job_create.title)
+    normalized_title = normalize_job_title(job_create.title)
+    title_key = job_title_key(normalized_title)
 
     with session.begin():
         existing_jobs = session.exec(select(Job).order_by(Job.created_at.desc())).all()
@@ -50,19 +48,17 @@ def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -
                 ).first()
                 if rubric is None:
                     raise HTTPException(status_code=409, detail="Existing job has no rubric")
-                return JobWithRubric(
-                    job=JobRead.model_validate(existing_job), rubric=read_rubric(rubric)
-                )
+                return JobWithRubric(job=read_job(existing_job), rubric=read_rubric(rubric))
 
         rubric_payload = json.loads(rubric_to_json(job_create))
         job = Job(
-            title=job_create.title,
+            title=normalized_title,
             description=job_create.description,
             target_profile_text=job_create.target_profile_text,
             red_flags_text=job_create.red_flags_text,
             search_notes=job_create.search_notes,
             search_channels=normalize_search_channels(job_create.search_channels)
-            or default_job_search_channels(job_create.title, job_create.description),
+            or default_job_search_channels(normalized_title, job_create.description),
         )
         session.add(job)
         session.flush()
@@ -76,7 +72,7 @@ def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -
     session.refresh(job)
     session.refresh(rubric)
 
-    return JobWithRubric(job=JobRead.model_validate(job), rubric=read_rubric(rubric))
+    return JobWithRubric(job=read_job(job), rubric=read_rubric(rubric))
 
 
 @router.get("", response_model=list[JobRead])
@@ -90,7 +86,7 @@ def list_jobs(session: Session = Depends(get_session)) -> list[JobRead]:
             continue
         seen_titles.add(title_key)
         unique_jobs.append(job)
-    return [JobRead.model_validate(job) for job in unique_jobs]
+    return [read_job(job) for job in unique_jobs]
 
 
 @router.get("/{job_id}", response_model=JobWithRubric)
@@ -105,4 +101,4 @@ def get_job(job_id: str, session: Session = Depends(get_session)) -> JobWithRubr
     if rubric is None:
         raise HTTPException(status_code=404, detail="Rubric not found")
 
-    return JobWithRubric(job=JobRead.model_validate(job), rubric=read_rubric(rubric))
+    return JobWithRubric(job=read_job(job), rubric=read_rubric(rubric))
