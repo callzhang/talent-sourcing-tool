@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class JobCreate(BaseModel):
@@ -47,6 +47,7 @@ class SearchCreate(BaseModel):
     job_id: str
     query: str
     provider: str = "bright_data"
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class CandidateRead(BaseModel):
