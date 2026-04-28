@@ -69,7 +69,8 @@ it("loads persisted runs and reports candidates from a new search", async () => 
 
   expect(await screen.findByText("existing ai pmm search")).toBeInTheDocument();
   expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
-  expect(screen.getByText("LinkedIn + GitHub + Exa")).toBeInTheDocument();
+  expect(screen.getAllByText("LinkedIn + GitHub + Exa")).toHaveLength(2);
+  expect(screen.getByText("Searching Channels")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("Candidate limit"), {
     target: { value: "2" }
@@ -112,6 +113,45 @@ it("requires a selected JD before searching", () => {
   fireEvent.submit(screen.getByLabelText("Search query").closest("form") as HTMLFormElement);
 
   expect(screen.getByText("Create or select a JD before searching.")).toBeInTheDocument();
+});
+
+it("shows the active search channels while a search is running", async () => {
+  let resolveSearch: (value: Response) => void = () => undefined;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (url.endsWith("/api/search?job_id=job_1") && method === "GET") {
+      return jsonResponse([]);
+    }
+    if (url.endsWith("/api/search") && method === "POST") {
+      return new Promise<Response>((resolve) => {
+        resolveSearch = resolve;
+      });
+    }
+    return jsonResponse([]);
+  });
+
+  render(
+    <SearchPage
+      jobs={[job]}
+      selectedJobId="job_1"
+      onSelectJob={() => undefined}
+      onCandidatesFound={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Create search run" }));
+  expect(await screen.findByText("Running sourcing search on LinkedIn + GitHub + Exa...")).toBeInTheDocument();
+
+  resolveSearch(
+    await jsonResponse({
+      id: "search_run_new",
+      status: "completed",
+      candidates: [candidate]
+    })
+  );
+  expect(await screen.findByText("Search completed with 1 candidates.")).toBeInTheDocument();
 });
 
 it("shows search run load and create errors", async () => {

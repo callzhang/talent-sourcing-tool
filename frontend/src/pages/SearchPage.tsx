@@ -82,7 +82,7 @@ export function SearchPage({
       return;
     }
     setIsSearching(true);
-    setStatus("Running sourcing search...");
+    setStatus(`Running sourcing search on ${formatChannels(channels)}...`);
     try {
       const result = await api.createSearch({
         job_id: selectedJobId,
@@ -172,6 +172,10 @@ export function SearchPage({
             />
           </label>
           <SearchChannelField value={channels} onChange={setChannels} />
+          <div className="search-channel-summary" aria-live="polite">
+            <span className="detail-label">Searching Channels</span>
+            <strong>{formatChannels(channels)}</strong>
+          </div>
           <button className="primary-action" type="submit" disabled={isSearching}>
             Create search run
           </button>
@@ -239,6 +243,14 @@ function toggleChannel(current: SearchChannel[], channel: SearchChannel): Search
 
 function channelLabel(channel: string): string {
   return SEARCH_CHANNEL_OPTIONS.find((option) => option.value === channel)?.label ?? channel;
+}
+
+function formatChannels(channels: string[]): string {
+  const labels = channels.map(channelLabel);
+  if (labels.length === 0) {
+    return "No channels selected";
+  }
+  return labels.join(" + ");
 }
 
 function searchQueryForJob(job: Job | null): string {

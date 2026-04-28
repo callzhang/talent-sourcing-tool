@@ -348,6 +348,15 @@ h3 {
   gap: 12px;
 }
 
+.search-channel-summary {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
 .candidate-list-row span {
   color: var(--color-text-secondary);
   font-size: 0.875rem;
