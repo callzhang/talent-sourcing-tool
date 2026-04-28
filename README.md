@@ -100,7 +100,7 @@ Review jobs are started through the backend. The worker:
 - creates a temporary review workspace under `TALENT_REVIEW_WORKSPACE_ROOT`;
 - creates a temporary `HOME` for the Codex process;
 - writes `input.json` and `review.schema.json`;
-- runs `TALENT_CODEX_BINARY <workspace>`;
+- runs `TALENT_CODEX_BINARY exec <workspace>`;
 - requires the worker to create `review.json`;
 - validates required review fields before persisting the review.
 
