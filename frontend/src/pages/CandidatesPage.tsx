@@ -235,8 +235,50 @@ function sourceList(value: unknown): Array<{ title: string; url: string }> {
       return [];
     }
     const source = item as Record<string, unknown>;
-    return typeof source.title === "string" && typeof source.url === "string"
-      ? [{ title: source.title, url: source.url }]
+    const title = typeof source.title === "string" ? source.title : null;
+    const url = typeof source.url === "string" ? source.url : null;
+    const sourceType =
+      typeof source.source_type === "string"
+        ? source.source_type
+        : typeof source.channel === "string"
+          ? source.channel
+          : inferSourceType(url);
+    return title && url
+      ? [{ title: formatSourceLabel(sourceType, title), url }]
       : [];
   });
+}
+
+function inferSourceType(url: string | null): string {
+  if (!url) {
+    return "source";
+  }
+  if (url.includes("linkedin.com")) {
+    return "linkedin";
+  }
+  if (url.includes("github.com")) {
+    return "github";
+  }
+  if (url.includes("openreview.net")) {
+    return "openreview";
+  }
+  if (url.includes("arxiv.org")) {
+    return "arxiv";
+  }
+  if (url.includes("exa.ai")) {
+    return "exa";
+  }
+  return "source";
+}
+
+function formatSourceLabel(sourceType: string, title: string): string {
+  const labels: Record<string, string> = {
+    linkedin: "LinkedIn",
+    github: "GitHub",
+    openreview: "OpenReview",
+    arxiv: "arXiv",
+    exa: "Exa",
+    source: "Source"
+  };
+  return `${labels[sourceType] ?? sourceType}: ${title}`;
 }

@@ -7,9 +7,12 @@ export type Job = {
   target_profile_text: string;
   red_flags_text: string;
   search_notes: string;
+  search_channels: SearchChannel[];
   created_at: ISODateString;
   updated_at: ISODateString;
 };
+
+export type SearchChannel = "linkedin" | "github" | "openreview" | "arxiv" | "exa";
 
 export type RubricDimension = {
   name: string;
@@ -72,6 +75,7 @@ export type SearchRun = {
   job_id: string;
   query: string;
   provider: string;
+  channels: SearchChannel[];
   status: string;
   params: Record<string, unknown>;
   candidate_count: number;

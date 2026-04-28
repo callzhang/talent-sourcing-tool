@@ -7,6 +7,7 @@ import type {
   RefinementSuggestion,
   ReviewRead,
   ReviewStartResult,
+  SearchChannel,
   SearchRun,
   SearchRunDetail,
   SearchRunResult
@@ -85,12 +86,14 @@ export type CreateJobPayload = {
   target_profile_text?: string;
   red_flags_text?: string;
   search_notes?: string;
+  search_channels?: SearchChannel[];
 };
 
 export type CreateSearchPayload = {
   job_id: string;
   query: string;
   provider?: string;
+  channels?: SearchChannel[];
   params?: Record<string, unknown>;
 };
 

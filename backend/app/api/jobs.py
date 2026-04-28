@@ -9,6 +9,7 @@ from app.db.models import Job, Rubric
 from app.db.session import get_session
 from app.schemas import JobCreate, JobRead, JobWithRubric, RubricRead
 from app.services.rubric import rubric_to_json
+from app.services.sourcing import default_job_search_channels, normalize_search_channels
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -60,6 +61,8 @@ def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -
             target_profile_text=job_create.target_profile_text,
             red_flags_text=job_create.red_flags_text,
             search_notes=job_create.search_notes,
+            search_channels=normalize_search_channels(job_create.search_channels)
+            or default_job_search_channels(job_create.title, job_create.description),
         )
         session.add(job)
         session.flush()

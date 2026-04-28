@@ -40,6 +40,7 @@ def test_create_job_generates_rubric(client: TestClient):
         "target_profile_text": "Strong builder, AI-native, product sense.",
         "red_flags_text": "Only traditional backend, no product sense.",
         "search_notes": "Search early AI app builders.",
+        "search_channels": ["linkedin", "github", "exa"],
     }
 
     response = client.post(
@@ -54,6 +55,7 @@ def test_create_job_generates_rubric(client: TestClient):
     assert data["job"]["target_profile_text"] == payload["target_profile_text"]
     assert data["job"]["red_flags_text"] == payload["red_flags_text"]
     assert data["job"]["search_notes"] == payload["search_notes"]
+    assert data["job"]["search_channels"] == payload["search_channels"]
     assert data["rubric"]["version"] == 1
     assert len(data["rubric"]["rubric"]["dimensions"]) >= 3
 
@@ -67,6 +69,7 @@ def test_create_job_persists_all_job_fields(client: TestClient, engine: Engine):
             "target_profile_text": "Product marketer with AI launch judgment.",
             "red_flags_text": "Only brand campaigns.",
             "search_notes": "Find product-led PMMs.",
+            "search_channels": ["linkedin", "exa"],
         },
     )
 
@@ -78,6 +81,26 @@ def test_create_job_persists_all_job_fields(client: TestClient, engine: Engine):
     assert job.target_profile_text == "Product marketer with AI launch judgment."
     assert job.red_flags_text == "Only brand campaigns."
     assert job.search_notes == "Find product-led PMMs."
+    assert job.search_channels == ["linkedin", "exa"]
+
+
+def test_create_job_defaults_channels_from_role_family(client: TestClient):
+    response = client.post(
+        "/api/jobs",
+        json={
+            "title": "Research Scientist",
+            "description": "Own applied AI algorithm development.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["job"]["search_channels"] == [
+        "linkedin",
+        "github",
+        "openreview",
+        "arxiv",
+        "exa",
+    ]
 
 
 def test_create_job_rolls_back_when_rubric_insert_fails(

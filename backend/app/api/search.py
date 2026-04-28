@@ -12,7 +12,12 @@ from sqlmodel import Session, select
 from app.db.models import Candidate, Job, SearchResult, SearchRun
 from app.db.session import get_session
 from app.schemas import CandidateRead, SearchCreate, SearchRunDetail, SearchRunRead
-from app.services.sourcing import CandidateSourceResult, get_sourcing_connector
+from app.services.sourcing import (
+    CandidateSourceResult,
+    default_job_search_channels,
+    get_sourcing_connector,
+    normalize_search_channels,
+)
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -145,6 +150,11 @@ def search_run_params(search_run: SearchRun) -> dict[str, Any]:
     return params if isinstance(params, dict) else {}
 
 
+def search_run_channels(search_run: SearchRun) -> list[str]:
+    channels = search_run.run_metadata.get("channels", [])
+    return normalize_search_channels(channels)
+
+
 def candidate_count_for_run(session: Session, search_run_id: str) -> int:
     return len(
         session.exec(
@@ -159,6 +169,7 @@ def read_search_run(session: Session, search_run: SearchRun) -> SearchRunRead:
         job_id=search_run.job_id,
         query=search_run.query,
         provider=search_run.provider,
+        channels=search_run_channels(search_run),
         status=search_run.status,
         params=search_run_params(search_run),
         candidate_count=candidate_count_for_run(session, search_run.id),
@@ -219,7 +230,12 @@ def create_search(
         query=search_create.query,
         provider=search_create.provider,
         status="running",
-        run_metadata={"params": search_create.params},
+        run_metadata={
+            "params": search_create.params,
+            "channels": normalize_search_channels(search_create.channels)
+            or job.search_channels
+            or default_job_search_channels(job.title, job.description),
+        },
     )
     session.add(search_run)
     session.commit()
@@ -227,7 +243,13 @@ def create_search(
 
     try:
         results = dedupe_results(
-            get_sourcing_connector().search_people(search_create.query, search_create.params)
+            get_sourcing_connector().search_people(
+                search_create.query,
+                {
+                    **search_create.params,
+                    "channels": search_run_channels(search_run),
+                },
+            )
         )
 
         candidates: list[Candidate] = []

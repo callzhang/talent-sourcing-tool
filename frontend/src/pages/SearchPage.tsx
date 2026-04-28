@@ -1,7 +1,15 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { Candidate, Job, SearchRun, SearchRunDetail } from "../types";
+import type { Candidate, Job, SearchChannel, SearchRun, SearchRunDetail } from "../types";
+
+const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "github", label: "GitHub" },
+  { value: "openreview", label: "OpenReview" },
+  { value: "arxiv", label: "arXiv" },
+  { value: "exa", label: "Exa" }
+];
 
 type SearchPageProps = {
   jobs: Job[];
@@ -20,6 +28,7 @@ export function SearchPage({
 }: SearchPageProps) {
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState("10");
+  const [channels, setChannels] = useState<SearchChannel[]>([]);
   const [runs, setRuns] = useState<SearchRun[]>([]);
   const [runDetails, setRunDetails] = useState<Record<string, SearchRunDetail>>({});
   const [status, setStatus] = useState("Choose a JD and create a search run.");
@@ -28,6 +37,7 @@ export function SearchPage({
 
   useEffect(() => {
     setQuery(searchQueryForJob(selectedJob));
+    setChannels(selectedJob?.search_channels ?? []);
   }, [selectedJob]);
 
   useEffect(() => {
@@ -77,6 +87,7 @@ export function SearchPage({
       const result = await api.createSearch({
         job_id: selectedJobId,
         query,
+        channels,
         params: { limit: Number(limit) || 10 }
       });
       onCandidatesFound(result.candidates);
@@ -86,6 +97,7 @@ export function SearchPage({
           job_id: selectedJobId,
           query,
           provider: "bright_data",
+          channels,
           status: result.status,
           params: { limit: Number(limit) || 10 },
           candidate_count: result.candidates.length,
@@ -101,6 +113,7 @@ export function SearchPage({
           job_id: selectedJobId,
           query,
           provider: "bright_data",
+          channels,
           status: result.status,
           params: { limit: Number(limit) || 10 },
           candidate_count: result.candidates.length,
@@ -158,6 +171,7 @@ export function SearchPage({
               onChange={(event) => setLimit(event.target.value)}
             />
           </label>
+          <SearchChannelField value={channels} onChange={setChannels} />
           <button className="primary-action" type="submit" disabled={isSearching}>
             Create search run
           </button>
@@ -175,6 +189,7 @@ export function SearchPage({
               <span>
                 {run.status} · {run.candidate_count} candidates
               </span>
+              <span>{run.channels.map(channelLabel).join(" + ")}</span>
               <RunCandidates
                 candidates={runDetails[run.id]?.candidates ?? []}
                 onReviewCandidate={onReviewCandidate}
@@ -185,6 +200,45 @@ export function SearchPage({
       </div>
     </section>
   );
+}
+
+function SearchChannelField({
+  value,
+  onChange
+}: {
+  value: SearchChannel[];
+  onChange: (channels: SearchChannel[]) => void;
+}) {
+  return (
+    <fieldset className="channel-fieldset">
+      <legend>Search channels</legend>
+      <div className="channel-option-list">
+        {SEARCH_CHANNEL_OPTIONS.map((channel) => (
+          <label key={channel.value} className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={value.includes(channel.value)}
+              onChange={() => onChange(toggleChannel(value, channel.value))}
+            />
+            <span>{channel.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function toggleChannel(current: SearchChannel[], channel: SearchChannel): SearchChannel[] {
+  if (current.includes(channel)) {
+    return current.filter((value) => value !== channel);
+  }
+  return SEARCH_CHANNEL_OPTIONS.map((option) => option.value).filter(
+    (value) => value === channel || current.includes(value)
+  );
+}
+
+function channelLabel(channel: string): string {
+  return SEARCH_CHANNEL_OPTIONS.find((option) => option.value === channel)?.label ?? channel;
 }
 
 function searchQueryForJob(job: Job | null): string {

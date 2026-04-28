@@ -12,6 +12,7 @@ class JobCreate(BaseModel):
     target_profile_text: str = ""
     red_flags_text: str = ""
     search_notes: str = ""
+    search_channels: list[str] = Field(default_factory=list)
 
 
 class JobRead(BaseModel):
@@ -23,6 +24,7 @@ class JobRead(BaseModel):
     target_profile_text: str
     red_flags_text: str
     search_notes: str
+    search_channels: list[str]
     created_at: datetime
     updated_at: datetime
 
@@ -46,6 +48,7 @@ class SearchCreate(BaseModel):
     job_id: str
     query: str
     provider: str = "bright_data"
+    channels: list[str] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -74,6 +77,7 @@ class SearchRunRead(BaseModel):
     job_id: str
     query: str
     provider: str
+    channels: list[str]
     status: str
     params: dict[str, Any]
     candidate_count: int

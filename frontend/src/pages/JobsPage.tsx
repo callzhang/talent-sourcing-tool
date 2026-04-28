@@ -1,7 +1,15 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { Job, JobWithRubric } from "../types";
+import type { Job, JobWithRubric, SearchChannel } from "../types";
+
+const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "github", label: "GitHub" },
+  { value: "openreview", label: "OpenReview" },
+  { value: "arxiv", label: "arXiv" },
+  { value: "exa", label: "Exa" }
+];
 
 type JobsPageProps = {
   selectedJobId: string | null;
@@ -17,6 +25,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
   const [targetProfile, setTargetProfile] = useState("");
   const [redFlags, setRedFlags] = useState("");
   const [searchNotes, setSearchNotes] = useState("");
+  const [searchChannels, setSearchChannels] = useState<SearchChannel[]>(["linkedin", "github", "exa"]);
   const [status, setStatus] = useState("Loading jobs...");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -77,7 +86,8 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
         description,
         target_profile_text: targetProfile,
         red_flags_text: redFlags,
-        search_notes: searchNotes
+        search_notes: searchNotes,
+        search_channels: searchChannels
       });
       setJobs((current) => [created.job, ...current.filter((job) => job.id !== created.job.id)]);
       setActiveJob(created);
@@ -87,6 +97,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
       setTargetProfile("");
       setRedFlags("");
       setSearchNotes("");
+      setSearchChannels(["linkedin", "github", "exa"]);
       setStatus("JD created and rubric generated.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to create JD.");
@@ -159,6 +170,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
                 onChange={(event) => setSearchNotes(event.target.value)}
               />
             </label>
+            <SearchChannelField value={searchChannels} onChange={setSearchChannels} />
             <button className="primary-action" type="submit" disabled={isSaving}>
               Create JD and rubric
             </button>
@@ -180,6 +192,7 @@ function JobDetail({ job }: { job: JobWithRubric | null }) {
       <DetailBlock label="Target profile" value={job.job.target_profile_text} />
       <DetailBlock label="Red flags" value={job.job.red_flags_text} />
       <DetailBlock label="Search notes" value={job.job.search_notes} />
+      <DetailBlock label="Search channels" value={job.job.search_channels.map(channelLabel).join(", ")} />
     </div>
   );
 }
@@ -233,4 +246,43 @@ function EvidenceList({ label, items }: { label: string; items: string[] }) {
       </ul>
     </div>
   );
+}
+
+function SearchChannelField({
+  value,
+  onChange
+}: {
+  value: SearchChannel[];
+  onChange: (channels: SearchChannel[]) => void;
+}) {
+  return (
+    <fieldset className="channel-fieldset">
+      <legend>Search channels</legend>
+      <div className="channel-option-list">
+        {SEARCH_CHANNEL_OPTIONS.map((channel) => (
+          <label key={channel.value} className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={value.includes(channel.value)}
+              onChange={() => onChange(toggleChannel(value, channel.value))}
+            />
+            <span>{channel.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function toggleChannel(current: SearchChannel[], channel: SearchChannel): SearchChannel[] {
+  if (current.includes(channel)) {
+    return current.filter((value) => value !== channel);
+  }
+  return SEARCH_CHANNEL_OPTIONS.map((option) => option.value).filter(
+    (value) => value === channel || current.includes(value)
+  );
+}
+
+function channelLabel(channel: string): string {
+  return SEARCH_CHANNEL_OPTIONS.find((option) => option.value === channel)?.label ?? channel;
 }

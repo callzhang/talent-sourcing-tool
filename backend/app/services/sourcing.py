@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import islice
 from typing import Any, Protocol
+from urllib.parse import quote_plus
+
+
+SEARCH_CHANNELS = ("linkedin", "github", "openreview", "arxiv", "exa")
+RESEARCH_CHANNELS = ("openreview", "arxiv")
+TECHNICAL_CHANNELS = ("github",)
 
 
 @dataclass(frozen=True)
@@ -27,9 +33,11 @@ class MockBrightDataConnector:
     def search_people(
         self, query: str, params: dict[str, Any] | None = None
     ) -> list[CandidateSourceResult]:
-        limit = int((params or {}).get("limit", 10))
+        options = params or {}
+        limit = int(options.get("limit", 10))
+        channels = normalize_search_channels(options.get("channels", []))
         if _matches_ai_product_engineer(query):
-            return list(islice(_ai_product_engineer_fixtures(query), limit))
+            return list(islice(_ai_product_engineer_fixtures(query, channels), limit))
 
         fixtures = [
             CandidateSourceResult(
@@ -39,7 +47,17 @@ class MockBrightDataConnector:
                 location="San Francisco, CA",
                 current_company="WedgeAI",
                 current_title="Founding Product Marketing Lead",
-                raw={"query": query, "source": "mock_bright_data", "rank": 1},
+                raw={
+                    "query": query,
+                    "source": "mock_bright_data",
+                    "rank": 1,
+                    "channels": channels,
+                    "sources": candidate_sources(
+                        name="Maya Chen",
+                        linkedin_url="https://www.linkedin.com/in/maya-founder-pmm",
+                        channels=channels,
+                    ),
+                },
             ),
             CandidateSourceResult(
                 linkedin_url="https://www.linkedin.com/in/leo-growth-ai",
@@ -48,7 +66,17 @@ class MockBrightDataConnector:
                 location="New York, NY",
                 current_company="LaunchGraph",
                 current_title="Head of Growth",
-                raw={"query": query, "source": "mock_bright_data", "rank": 2},
+                raw={
+                    "query": query,
+                    "source": "mock_bright_data",
+                    "rank": 2,
+                    "channels": channels,
+                    "sources": candidate_sources(
+                        name="Leo Martinez",
+                        linkedin_url="https://www.linkedin.com/in/leo-growth-ai",
+                        channels=channels,
+                    ),
+                },
             ),
             CandidateSourceResult(
                 linkedin_url="https://www.linkedin.com/in/priya-ai-market",
@@ -57,7 +85,17 @@ class MockBrightDataConnector:
                 location="Austin, TX",
                 current_company="SignalForge",
                 current_title="GTM Advisor",
-                raw={"query": query, "source": "mock_bright_data", "rank": 3},
+                raw={
+                    "query": query,
+                    "source": "mock_bright_data",
+                    "rank": 3,
+                    "channels": channels,
+                    "sources": candidate_sources(
+                        name="Priya Raman",
+                        linkedin_url="https://www.linkedin.com/in/priya-ai-market",
+                        channels=channels,
+                    ),
+                },
             ),
         ]
         return fixtures[:limit]
@@ -67,12 +105,83 @@ def get_sourcing_connector() -> SourcingConnector:
     return MockBrightDataConnector()
 
 
+def normalize_search_channels(channels: list[str] | tuple[str, ...] | Any) -> list[str]:
+    normalized_channels: list[str] = []
+    for channel in channels if isinstance(channels, list | tuple) else []:
+        normalized_channel = str(channel).strip().casefold()
+        if normalized_channel in SEARCH_CHANNELS and normalized_channel not in normalized_channels:
+            normalized_channels.append(normalized_channel)
+    return normalized_channels
+
+
+def default_job_search_channels(title: str, description: str) -> list[str]:
+    role_text = f"{title} {description}".casefold()
+    if any(keyword in role_text for keyword in ("research", "scientist", "algorithm", "applied ai")):
+        return ["linkedin", "github", "openreview", "arxiv", "exa"]
+    if any(
+        keyword in role_text
+        for keyword in (
+            "engineer",
+            "developer",
+            "product",
+            "technical",
+            "builder",
+            "founder",
+        )
+    ):
+        return ["linkedin", "github", "exa"]
+    return ["linkedin", "exa"]
+
+
+def candidate_sources(name: str, linkedin_url: str, channels: list[str]) -> list[dict[str, str]]:
+    sources: list[dict[str, str]] = []
+    encoded_name = quote_plus(name)
+    for channel in channels:
+        if channel == "linkedin":
+            sources.append(
+                {"source_type": "linkedin", "title": "LinkedIn profile", "url": linkedin_url}
+            )
+        elif channel == "github":
+            sources.append(
+                {
+                    "source_type": "github",
+                    "title": "GitHub people search",
+                    "url": f"https://github.com/search?q={encoded_name}&type=users",
+                }
+            )
+        elif channel == "openreview":
+            sources.append(
+                {
+                    "source_type": "openreview",
+                    "title": "OpenReview author search",
+                    "url": f"https://openreview.net/search?term={encoded_name}",
+                }
+            )
+        elif channel == "arxiv":
+            sources.append(
+                {
+                    "source_type": "arxiv",
+                    "title": "arXiv author search",
+                    "url": f"https://arxiv.org/search/?query={encoded_name}&searchtype=author",
+                }
+            )
+        elif channel == "exa":
+            sources.append(
+                {
+                    "source_type": "exa",
+                    "title": "Exa web search",
+                    "url": f"https://exa.ai/search?q={encoded_name}",
+                }
+            )
+    return sources
+
+
 def _matches_ai_product_engineer(query: str) -> bool:
     normalized_query = query.lower()
     return "ai" in normalized_query and "product" in normalized_query and "engineer" in normalized_query
 
 
-def _ai_product_engineer_fixtures(query: str) -> list[CandidateSourceResult]:
+def _ai_product_engineer_fixtures(query: str, channels: list[str]) -> list[CandidateSourceResult]:
     profiles = [
         {
             "slug": "alex-rivera-ai-product-engineer",
@@ -234,8 +343,14 @@ def _ai_product_engineer_fixtures(query: str) -> list[CandidateSourceResult]:
                 "source": "mock_bright_data",
                 "rank": rank,
                 "target_role": "AI Product Engineer",
+                "channels": channels,
                 "signals": profile["signals"],
                 "risks": profile["risks"],
+                "sources": candidate_sources(
+                    name=str(profile["name"]),
+                    linkedin_url=f"https://www.linkedin.com/in/{profile['slug']}",
+                    channels=channels,
+                ),
             },
         )
         for rank, profile in enumerate(profiles, start=1)

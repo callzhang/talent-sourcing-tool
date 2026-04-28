@@ -176,7 +176,9 @@ def test_migrate_existing_sqlite_schema_adds_job_profile_columns(tmp_path: Path)
             row[1] for row in connection.execute(text("PRAGMA table_info(reviewjob)")).all()
         }
 
-    assert {"target_profile_text", "red_flags_text", "search_notes"}.issubset(job_columns)
+    assert {"target_profile_text", "red_flags_text", "search_notes", "search_channels"}.issubset(
+        job_columns
+    )
     assert {"input_path", "output_path"}.issubset(review_job_columns)
 
 
@@ -197,6 +199,99 @@ def test_migrate_existing_sqlite_schema_is_idempotent(tmp_path: Path):
 
     assert job_columns.count("target_profile_text") == 1
     assert review_job_columns.count("input_path") == 1
+
+
+def test_migrate_existing_sqlite_schema_backfills_search_run_channels(tmp_path: Path):
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'legacy-runs.sqlite3'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE job (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    title VARCHAR NOT NULL,
+                    description VARCHAR NOT NULL,
+                    target_profile_text TEXT NOT NULL DEFAULT '',
+                    red_flags_text TEXT NOT NULL DEFAULT '',
+                    search_notes TEXT NOT NULL DEFAULT '',
+                    search_channels JSON NOT NULL DEFAULT '[]',
+                    status VARCHAR NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE searchrun (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    job_id VARCHAR NOT NULL,
+                    query VARCHAR NOT NULL,
+                    provider VARCHAR NOT NULL,
+                    status VARCHAR NOT NULL,
+                    metadata JSON,
+                    created_at DATETIME NOT NULL,
+                    completed_at DATETIME
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE reviewjob (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    job_id VARCHAR NOT NULL,
+                    candidate_id VARCHAR NOT NULL,
+                    status VARCHAR NOT NULL,
+                    workspace_path VARCHAR,
+                    error_message VARCHAR,
+                    created_at DATETIME NOT NULL,
+                    started_at DATETIME,
+                    completed_at DATETIME
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO job
+                (id, title, description, search_channels, status, created_at, updated_at)
+                VALUES
+                ('job_1', 'Founding PMM', 'Own product marketing for AI launch.', '["linkedin","exa"]', 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO searchrun
+                (id, job_id, query, provider, status, metadata, created_at)
+                VALUES
+                (:id, :job_id, :query, :provider, :status, :metadata, CURRENT_TIMESTAMP)
+                """
+            ),
+            {
+                "id": "search_run_1",
+                "job_id": "job_1",
+                "query": "founding PMM",
+                "provider": "bright_data",
+                "status": "completed",
+                "metadata": '{"params":{"limit":10}}',
+            },
+        )
+
+    migrate_existing_sqlite_schema(engine)
+
+    with engine.begin() as connection:
+        metadata = connection.execute(
+            text("SELECT metadata FROM searchrun WHERE id = 'search_run_1'")
+        ).scalar_one()
+
+    assert '"channels": ["linkedin", "exa"]' in str(metadata)
 
 
 def test_migrate_existing_schema_ignores_non_sqlite_engine():

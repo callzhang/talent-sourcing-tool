@@ -82,7 +82,7 @@ it("renders candidate listings in the left pane and selected candidate details i
 
   expect(queuePane).toContainElement(within(queuePane).getByRole("button", { name: /Candidate One/ }));
   expect(detailPane).toContainElement(screen.getByText("Evidence of structured PMF interviews."));
-  expect(detailPane).toContainElement(screen.getByText("Portfolio source"));
+  expect(detailPane).toContainElement(screen.getByText("GitHub: Portfolio source"));
   expect(queuePane.compareDocumentPosition(detailPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
@@ -205,6 +205,7 @@ const job: Job = {
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "",
+  search_channels: ["linkedin", "exa"],
   created_at: "2026-04-28T12:00:00Z",
   updated_at: "2026-04-28T12:00:00Z"
 };
@@ -237,6 +238,7 @@ const candidateWithEvidence: Candidate = {
       risks: ["Availability needs confirmation."],
       sources: [
         {
+          source_type: "github",
           title: "Portfolio source",
           url: "https://example.com/profile",
           evidence: "Shows product discovery artifacts."

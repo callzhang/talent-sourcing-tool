@@ -102,7 +102,12 @@ def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: Test
     job_id = create_job(client)
     first_response = client.post(
         "/api/search",
-        json={"job_id": job_id, "query": "founding PMM AI startup", "params": {"limit": 1}},
+        json={
+            "job_id": job_id,
+            "query": "founding PMM AI startup",
+            "channels": ["linkedin", "exa"],
+            "params": {"limit": 1},
+        },
     )
     second_response = client.post(
         "/api/search",
@@ -118,6 +123,7 @@ def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: Test
     assert [run["query"] for run in data] == ["AI product marketer", "founding PMM AI startup"]
     assert data[0]["candidate_count"] == 2
     assert data[0]["params"] == {"limit": 2}
+    assert data[1]["channels"] == ["linkedin", "exa"]
 
 
 def test_get_search_run_returns_candidates(client: TestClient):
@@ -135,7 +141,32 @@ def test_get_search_run_returns_candidates(client: TestClient):
     data = response.json()
     assert data["id"] == search_run_id
     assert data["query"] == "founding PMM AI startup"
+    assert data["channels"] == ["linkedin", "exa"]
     assert len(data["candidates"]) == 1
+
+
+def test_search_uses_job_channels_when_request_channels_are_empty(client: TestClient):
+    response = client.post(
+        "/api/jobs",
+        json={
+            "title": "Founding PMM",
+            "description": "Find PMF wedge",
+            "search_channels": ["linkedin", "exa"],
+        },
+    )
+    assert response.status_code == 200
+    job_id = str(response.json()["job"]["id"])
+
+    create_response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "founding PMM AI startup", "params": {"limit": 1}},
+    )
+
+    assert create_response.status_code == 200
+    search_run_id = create_response.json()["id"]
+    detail_response = client.get(f"/api/search/{search_run_id}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["channels"] == ["linkedin", "exa"]
 
 
 def test_get_search_run_404s_for_missing_run(client: TestClient):

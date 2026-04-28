@@ -23,6 +23,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
           job_id: "job_1",
           query: "existing ai pmm search",
           provider: "bright_data",
+          channels: ["linkedin", "github", "exa"],
           status: "completed",
           params: { limit: 3 },
           candidate_count: 3,
@@ -37,6 +38,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
         job_id: "job_1",
         query: "existing ai pmm search",
         provider: "bright_data",
+        channels: ["linkedin", "github", "exa"],
         status: "completed",
         params: { limit: 3 },
         candidate_count: 1,
@@ -67,6 +69,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
 
   expect(await screen.findByText("existing ai pmm search")).toBeInTheDocument();
   expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
+  expect(screen.getByText("LinkedIn + GitHub + Exa")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("Candidate limit"), {
     target: { value: "2" }
@@ -85,6 +88,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
       body: JSON.stringify({
         job_id: "job_1",
         query: "Search configured from the JD",
+        channels: ["linkedin", "github", "exa"],
         params: { limit: 2 }
       })
     })
@@ -162,6 +166,7 @@ const job: Job = {
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "Search configured from the JD",
+  search_channels: ["linkedin", "github", "exa"],
   created_at: "2026-04-28T12:00:00Z",
   updated_at: "2026-04-28T12:00:00Z"
 };

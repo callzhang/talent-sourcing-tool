@@ -70,6 +70,7 @@ class Job(SQLModel, table=True):
     target_profile_text: str = ""
     red_flags_text: str = ""
     search_notes: str = ""
+    search_channels: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     status: str = Field(default="draft", index=True)
     created_at: datetime = Field(default_factory=now_utc)
     updated_at: datetime = Field(default_factory=now_utc)
