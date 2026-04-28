@@ -18,6 +18,7 @@ from app.db.models import (
 )
 from app.db.session import get_session
 from app.schemas import DecisionCreate, ReviewStart
+from app.services.pass_reason import draft_pass_reason
 from app.services.review_worker import ReviewWorker
 
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
@@ -130,6 +131,15 @@ def start_review(
         "review_id": review.id,
         "review": review_data,
     }
+
+
+@router.get("/{review_id}/draft-pass-reason")
+def get_draft_pass_reason(review_id: str, session: Session = Depends(get_session)) -> dict[str, Any]:
+    review = session.get(Review, review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    return draft_pass_reason(review.raw_review)
 
 
 @router.post("/decision")
