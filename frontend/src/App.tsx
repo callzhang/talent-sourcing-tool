@@ -59,27 +59,35 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <header className="hero">
-        <div>
+      <header className="app-header">
+        <div className="app-nav">
+          <div className="brand-lockup" aria-label="Talent Sourcing Tool">
+            <span className="brand-mark" aria-hidden="true">
+              TS
+            </span>
+            <span className="brand-name">Talent Sourcing Tool</span>
+          </div>
+          <nav className="tabs" aria-label="Primary">
+            {pages.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="tab"
+                aria-pressed={page === item.id}
+                onClick={() => setPage(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div className="page-intro">
           <p className="eyebrow">Local sourcing workspace</p>
           <h1>Talent Sourcing Tool</h1>
           <p className="hero-copy">
             JD to LinkedIn sourcing to AI review to pass/proceed feedback loop.
           </p>
         </div>
-        <nav className="tabs" aria-label="Primary">
-          {pages.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="tab"
-              aria-pressed={page === item.id}
-              onClick={() => setPage(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
       </header>
 
       {page === "jobs" ? (
