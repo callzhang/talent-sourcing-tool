@@ -28,19 +28,26 @@ def read_rubric(rubric: Rubric) -> RubricRead:
 
 @router.post("", response_model=JobWithRubric)
 def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -> JobWithRubric:
-    job = Job(title=job_create.title, description=job_create.description)
-    session.add(job)
-    session.commit()
-    session.refresh(job)
-
-    rubric_payload = json.loads(rubric_to_json(job_create))
-    rubric = Rubric(
-        job_id=job.id,
-        name=f"{job.title} Rubric",
-        criteria=[rubric_payload],
+    job = Job(
+        title=job_create.title,
+        description=job_create.description,
+        target_profile_text=job_create.target_profile_text,
+        red_flags_text=job_create.red_flags_text,
+        search_notes=job_create.search_notes,
     )
-    session.add(rubric)
-    session.commit()
+    rubric_payload = json.loads(rubric_to_json(job_create))
+
+    with session.begin():
+        session.add(job)
+        session.flush()
+        rubric = Rubric(
+            job_id=job.id,
+            name=f"{job.title} Rubric",
+            criteria=[rubric_payload],
+        )
+        session.add(rubric)
+
+    session.refresh(job)
     session.refresh(rubric)
 
     return JobWithRubric(job=JobRead.model_validate(job), rubric=read_rubric(rubric))

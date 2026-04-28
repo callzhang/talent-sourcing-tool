@@ -67,6 +67,9 @@ class Job(SQLModel, table=True):
     id: str = Field(default_factory=job_id, primary_key=True)
     title: str
     description: str
+    target_profile_text: str = ""
+    red_flags_text: str = ""
+    search_notes: str = ""
     status: str = Field(default="draft", index=True)
     created_at: datetime = Field(default_factory=now_utc)
     updated_at: datetime = Field(default_factory=now_utc)
