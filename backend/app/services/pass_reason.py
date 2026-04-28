@@ -19,6 +19,18 @@ REASON_COPY = {
         "Insufficient public evidence",
         "the review does not provide enough public evidence to justify moving forward",
     ),
+    "platform_only_background": (
+        "Platform-only background",
+        "the review points more toward infrastructure or platform work than AI product prototyping",
+    ),
+    "solutions_architecture_mismatch": (
+        "Solutions architecture mismatch",
+        "the review points more toward solutions architecture than end-to-end product engineering",
+    ),
+    "consulting_heavy_profile": (
+        "Consulting-heavy profile",
+        "the review points more toward advisory or lightweight demo work than hands-on product building",
+    ),
 }
 ACTIONABLE_REFINEMENTS = {
     "too_enterprise_sales_oriented": {
@@ -33,6 +45,27 @@ ACTIONABLE_REFINEMENTS = {
         "suggestion_text": (
             "Clarify the builder-evidence rubric so reviewers consistently distinguish "
             "hands-on shipping from advisory or leadership-only experience."
+        ),
+    },
+    "platform_only_background": {
+        "suggestion_type": "query_rewrite",
+        "suggestion_text": (
+            "Add negative sourcing terms for platform-only and infrastructure-heavy profiles "
+            "when searching for AI Product Engineer candidates."
+        ),
+    },
+    "solutions_architecture_mismatch": {
+        "suggestion_type": "query_rewrite",
+        "suggestion_text": (
+            "Separate solutions architect searches from AI Product Engineer searches unless "
+            "the candidate shows direct product-building ownership."
+        ),
+    },
+    "consulting_heavy_profile": {
+        "suggestion_type": "query_rewrite",
+        "suggestion_text": (
+            "Exclude consulting-heavy AI demo profiles unless there is clear evidence of "
+            "hands-on full-stack product implementation."
         ),
     },
 }

@@ -47,10 +47,14 @@ payload = json.loads((workspace / "input.json").read_text())
 
 
 def test_review_worker_invokes_codex_with_prompt_and_isolated_environment(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     fake_codex = tmp_path / "codex"
     invocation_path = tmp_path / "invocation.json"
+    source_codex_home = tmp_path / "source-codex-home"
+    source_codex_home.mkdir()
+    (source_codex_home / "auth.json").write_text('{"token":"test-token"}')
+    monkeypatch.setenv("CODEX_HOME", str(source_codex_home))
     fake_codex.write_text(
         f"""#!/usr/bin/env python
 import json
@@ -90,14 +94,19 @@ Path({str(invocation_path)!r}).write_text(json.dumps({{
     assert invocation["codex_home"].startswith(str(tmp_path))
     assert invocation["home"] != os.environ.get("HOME")
     assert invocation["codex_home"] != os.environ.get("CODEX_HOME")
+    assert Path(invocation["codex_home"], "auth.json").read_text() == '{"token":"test-token"}'
     assert "--cd" in invocation["argv"]
     assert str(result.workspace) in invocation["argv"]
+    assert "--sandbox" in invocation["argv"]
+    assert "workspace-write" in invocation["argv"]
     assert "--ephemeral" in invocation["argv"]
     assert "--ignore-user-config" in invocation["argv"]
     assert "--ignore-rules" in invocation["argv"]
     prompt = invocation["argv"][-1]
     assert "Read input.json" in prompt
     assert "review.schema.json" in prompt
+    assert "profile_data.raw.signals" in prompt
+    assert "reason_code" in prompt
     assert "write review.json" in prompt
     assert prompt != str(result.workspace)
 

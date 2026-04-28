@@ -2,12 +2,13 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, select
 
 from app.core.config import Settings
 from app.db import models
-from app.db.init_db import init_db
+from app.db.init_db import init_db, migrate_existing_sqlite_schema
 from app.db.models import Candidate, CandidateDecision, Job, PassReason
 from app.db.session import create_db_engine, get_session
 from app.schemas import DecisionCreate
@@ -128,6 +129,84 @@ def test_init_db_invokes_metadata_create_all(monkeypatch):
     init_db()
 
     assert len(calls) == 1
+
+
+def test_migrate_existing_sqlite_schema_adds_job_profile_columns(tmp_path: Path):
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'legacy.sqlite3'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE job (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    title VARCHAR NOT NULL,
+                    description VARCHAR NOT NULL,
+                    status VARCHAR NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE reviewjob (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    job_id VARCHAR NOT NULL,
+                    candidate_id VARCHAR NOT NULL,
+                    status VARCHAR NOT NULL,
+                    workspace_path VARCHAR,
+                    error_message VARCHAR,
+                    created_at DATETIME NOT NULL,
+                    started_at DATETIME,
+                    completed_at DATETIME
+                )
+                """
+            )
+        )
+
+    migrate_existing_sqlite_schema(engine)
+
+    with engine.begin() as connection:
+        job_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(job)")).all()
+        }
+        review_job_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(reviewjob)")).all()
+        }
+
+    assert {"target_profile_text", "red_flags_text", "search_notes"}.issubset(job_columns)
+    assert {"input_path", "output_path"}.issubset(review_job_columns)
+
+
+def test_migrate_existing_sqlite_schema_is_idempotent(tmp_path: Path):
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'current.sqlite3'}")
+    SQLModel.metadata.create_all(engine)
+
+    migrate_existing_sqlite_schema(engine)
+    migrate_existing_sqlite_schema(engine)
+
+    with engine.begin() as connection:
+        job_columns = [
+            row[1] for row in connection.execute(text("PRAGMA table_info(job)")).all()
+        ]
+        review_job_columns = [
+            row[1] for row in connection.execute(text("PRAGMA table_info(reviewjob)")).all()
+        ]
+
+    assert job_columns.count("target_profile_text") == 1
+    assert review_job_columns.count("input_path") == 1
+
+
+def test_migrate_existing_schema_ignores_non_sqlite_engine():
+    class Dialect:
+        name = "postgresql"
+
+    class NonSqliteEngine:
+        dialect = Dialect()
+
+    migrate_existing_sqlite_schema(NonSqliteEngine())  # type: ignore[arg-type]
 
 
 def test_app_lifespan_initializes_tables_when_enabled(monkeypatch):

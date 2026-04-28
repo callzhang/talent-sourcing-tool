@@ -101,7 +101,8 @@ Review jobs are started through the backend. The worker:
 - creates temporary `HOME` and `CODEX_HOME` directories for the Codex process;
 - writes `input.json` and `review.schema.json`;
 - runs `TALENT_CODEX_BINARY exec` from the review workspace with a prompt that instructs Codex to read `input.json`, follow `review.schema.json`, and write `review.json`;
-- when the configured command is `codex exec`, adds `--cd <workspace>`, `--skip-git-repo-check`, `--ephemeral`, `--ignore-user-config`, and `--ignore-rules` to avoid loading unrelated local Codex config or project rules;
+- when the configured command is `codex exec`, copies only `auth.json` into the temporary `CODEX_HOME` so the process can authenticate without loading unrelated local Codex config;
+- when the configured command is `codex exec`, adds `--cd <workspace>`, `--sandbox workspace-write`, `--skip-git-repo-check`, `--ephemeral`, `--ignore-user-config`, and `--ignore-rules` to avoid loading unrelated local Codex config or project rules;
 - requires the worker to create `review.json`;
 - validates required review fields before persisting the review.
 
@@ -109,7 +110,7 @@ The Codex process is file-boundary-only from the backend perspective. It should 
 
 ## Database Note
 
-Local development defaults to SQLite at `backend/talent_sourcing.sqlite3`. Keep migrations and schema choices compatible with Turso/libSQL-style SQLite semantics: avoid database-specific features that would not work in libSQL, and use SQLModel/SQLAlchemy-compatible URLs through `TALENT_DATABASE_URL`.
+Local development defaults to SQLite at `backend/talent_sourcing.sqlite3`. App startup creates missing tables and applies the current lightweight SQLite schema migration for existing local databases. Keep migrations and schema choices compatible with Turso/libSQL-style SQLite semantics: avoid database-specific features that would not work in libSQL, and use SQLModel/SQLAlchemy-compatible URLs through `TALENT_DATABASE_URL`.
 
 ## Testing
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -23,6 +24,13 @@ REQUIRED_REVIEW_FIELDS = {
 REVIEW_PROMPT = """You are running a file-protocol candidate review in this workspace.
 Read input.json for the review job, candidate, job, and rubric payload.
 Follow review.schema.json exactly for the output contract.
+Use profile_data.raw.signals, profile_data.raw.risks, and public profile fields as evidence.
+Score 85-100 for strong_proceed, 70-84 for proceed, 55-69 for borderline, and below 55 for pass.
+Penalize candidates who are GTM-only, platform-only, consulting-heavy, or lack hands-on AI prototype evidence.
+For each dimension_scores item with score below 70, include reason_code using one of:
+weak_builder_evidence, insufficient_ai_native_signal, too_enterprise_sales_oriented,
+platform_only_background, solutions_architecture_mismatch, consulting_heavy_profile,
+or insufficient_public_evidence.
 Then write review.json in this current workspace as a single JSON object.
 Do not write directly to any database or modify files other than review.json."""
 
@@ -63,6 +71,7 @@ class ReviewWorker:
         temp_codex_home = Path(
             tempfile.mkdtemp(prefix=f"{review_job_id}-codex-home-", dir=self.workspace_root)
         )
+        self._copy_codex_auth(temp_codex_home)
         input_path = workspace / "input.json"
         output_path = workspace / "review.json"
 
@@ -140,6 +149,8 @@ class ReviewWorker:
                 [
                     "--cd",
                     str(workspace),
+                    "--sandbox",
+                    "workspace-write",
                     "--skip-git-repo-check",
                     "--ephemeral",
                     "--ignore-user-config",
@@ -152,3 +163,10 @@ class ReviewWorker:
     @staticmethod
     def _is_codex_exec_command(command: list[str]) -> bool:
         return len(command) >= 2 and Path(command[0]).name == "codex" and command[1] == "exec"
+
+    @staticmethod
+    def _copy_codex_auth(temp_codex_home: Path) -> None:
+        source_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+        source_auth = source_home / "auth.json"
+        if source_auth.exists():
+            shutil.copy2(source_auth, temp_codex_home / "auth.json")

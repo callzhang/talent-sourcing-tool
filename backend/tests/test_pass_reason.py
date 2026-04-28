@@ -158,6 +158,33 @@ def test_suggest_refinements_maps_weak_builder_to_rubric_adjustment():
     assert any(item["suggestion_type"] == "rubric_adjustment" for item in suggestions)
 
 
+@pytest.mark.parametrize(
+    "reason_code",
+    [
+        "platform_only_background",
+        "solutions_architecture_mismatch",
+        "consulting_heavy_profile",
+    ],
+)
+def test_suggest_refinements_maps_role_mismatch_reasons_to_query_rewrites(reason_code):
+    suggestions = suggest_refinements(
+        pass_reasons=[
+            {
+                "reason_code": reason_code,
+                "reason_text": "Mismatch",
+            }
+        ]
+    )
+
+    assert suggestions == [
+        {
+            "suggestion_type": "query_rewrite",
+            "suggestion_text": suggestions[0]["suggestion_text"],
+            "reason_codes": [reason_code],
+        }
+    ]
+
+
 def test_suggest_refinements_returns_no_fallback_for_non_actionable_reasons():
     suggestions = suggest_refinements(
         pass_reasons=[

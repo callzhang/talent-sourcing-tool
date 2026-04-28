@@ -77,6 +77,27 @@ def test_search_upserts_candidates_by_linkedin_url(client: TestClient, engine: E
     assert len(candidates) == 2
 
 
+def test_search_returns_ai_product_engineer_fixture_set(client: TestClient):
+    job_id = create_job(client)
+
+    response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "AI Product Engineer prototype builder vibe coding",
+            "params": {"limit": 10},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["candidates"]) == 10
+    assert data["candidates"][0]["name"] == "Alex Rivera"
+    assert data["candidates"][0]["profile_data"]["raw"]["target_role"] == "AI Product Engineer"
+    assert data["candidates"][0]["profile_data"]["raw"]["signals"]
+    assert data["candidates"][4]["profile_data"]["raw"]["risks"]
+
+
 def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: TestClient):
     job_id = create_job(client)
     first_response = client.post(
