@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.jobs import router as jobs_router
+from app.api.reviews import router as reviews_router
 from app.api.search import router as search_router
 from app.db.init_db import init_db
 
@@ -28,4 +29,5 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(jobs_router)
+app.include_router(reviews_router)
 app.include_router(search_router)

@@ -136,6 +136,8 @@ class ReviewJob(SQLModel, table=True):
     candidate_id: str = Field(foreign_key="candidate.id", index=True)
     status: str = Field(default="pending", index=True)
     workspace_path: str | None = None
+    input_path: str | None = None
+    output_path: str | None = None
     error_message: str | None = None
     created_at: datetime = Field(default_factory=now_utc)
     started_at: datetime | None = None

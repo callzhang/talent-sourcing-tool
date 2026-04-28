@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class JobCreate(BaseModel):
@@ -76,3 +76,13 @@ class DecisionCreate(BaseModel):
     decision: str
     notes: str | None = None
     decided_by: str = "agent"
+    pass_reason_code: str = "manual_pass"
+    pass_reason_text: str | None = None
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> "DecisionCreate":
+        if self.decision not in {"pass", "proceed"}:
+            raise ValueError("decision must be pass or proceed")
+        if self.decision == "pass" and not self.pass_reason_text:
+            raise ValueError("pass_reason_text is required for pass decisions")
+        return self
