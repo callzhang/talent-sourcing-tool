@@ -12,6 +12,7 @@ afterEach(() => {
 
 it("loads persisted runs and reports candidates from a new search", async () => {
   const onCandidatesFound = vi.fn();
+  const onReviewCandidate = vi.fn();
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -30,6 +31,20 @@ it("loads persisted runs and reports candidates from a new search", async () => 
         }
       ]);
     }
+    if (url.endsWith("/api/search/search_run_old") && method === "GET") {
+      return jsonResponse({
+        id: "search_run_old",
+        job_id: "job_1",
+        query: "existing ai pmm search",
+        provider: "bright_data",
+        status: "completed",
+        params: { limit: 3 },
+        candidate_count: 1,
+        created_at: "2026-04-28T12:00:00Z",
+        completed_at: "2026-04-28T12:01:00Z",
+        candidates: [persistedCandidate]
+      });
+    }
     if (url.endsWith("/api/search") && method === "POST") {
       return jsonResponse({
         id: "search_run_new",
@@ -46,14 +61,13 @@ it("loads persisted runs and reports candidates from a new search", async () => 
       selectedJobId="job_1"
       onSelectJob={() => undefined}
       onCandidatesFound={onCandidatesFound}
+      onReviewCandidate={onReviewCandidate}
     />
   );
 
   expect(await screen.findByText("existing ai pmm search")).toBeInTheDocument();
+  expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("Search query"), {
-    target: { value: "founding ai product engineer" }
-  });
   fireEvent.change(screen.getByLabelText("Candidate limit"), {
     target: { value: "2" }
   });
@@ -62,13 +76,15 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   await waitFor(() => expect(onCandidatesFound).toHaveBeenCalledWith([candidate]));
   expect(await screen.findByText("Search completed with 1 candidates.")).toBeInTheDocument();
   expect(screen.getByText("New Candidate")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Open Persisted Candidate" }));
+  expect(onReviewCandidate).toHaveBeenCalledWith(persistedCandidate);
   expect(fetchMock).toHaveBeenCalledWith(
     "http://localhost:8000/api/search",
     expect.objectContaining({
       method: "POST",
       body: JSON.stringify({
         job_id: "job_1",
-        query: "founding ai product engineer",
+        query: "Search configured from the JD",
         params: { limit: 2 }
       })
     })
@@ -82,6 +98,7 @@ it("requires a selected JD before searching", () => {
       selectedJobId={null}
       onSelectJob={() => undefined}
       onCandidatesFound={() => undefined}
+      onReviewCandidate={() => undefined}
     />
   );
 
@@ -104,6 +121,7 @@ it("shows search run load and create errors", async () => {
       selectedJobId="job_1"
       onSelectJob={() => undefined}
       onCandidatesFound={() => undefined}
+      onReviewCandidate={() => undefined}
     />
   );
 
@@ -126,6 +144,7 @@ it("selects a different JD from the search form", () => {
       selectedJobId="job_1"
       onSelectJob={onSelectJob}
       onCandidatesFound={() => undefined}
+      onReviewCandidate={() => undefined}
     />
   );
 
@@ -142,7 +161,7 @@ const job: Job = {
   description: "Build prototypes",
   target_profile_text: "",
   red_flags_text: "",
-  search_notes: "",
+  search_notes: "Search configured from the JD",
   created_at: "2026-04-28T12:00:00Z",
   updated_at: "2026-04-28T12:00:00Z"
 };
@@ -159,6 +178,14 @@ const candidate: Candidate = {
   updated_at: "2026-04-28T12:00:00Z",
   last_search_query: "founding ai product engineer",
   last_search_rank: 1
+};
+
+const persistedCandidate: Candidate = {
+  ...candidate,
+  id: "candidate_persisted",
+  name: "Persisted Candidate",
+  headline: "Founding PMM",
+  current_company: "MarketCo"
 };
 
 function jsonResponse(body: unknown) {

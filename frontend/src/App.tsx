@@ -103,6 +103,7 @@ export function App() {
           selectedJobId={selectedJobId}
           onSelectJob={setSelectedJobId}
           onCandidatesFound={setCandidates}
+          onReviewCandidate={handleReviewCandidate}
         />
       ) : null}
       {page === "candidates" ? (

@@ -1,31 +1,39 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { Candidate, Job, SearchRun } from "../types";
+import type { Candidate, Job, SearchRun, SearchRunDetail } from "../types";
 
 type SearchPageProps = {
   jobs: Job[];
   selectedJobId: string | null;
   onSelectJob: (jobId: string) => void;
   onCandidatesFound: (candidates: Candidate[]) => void;
+  onReviewCandidate: (candidate: Candidate) => void;
 };
 
 export function SearchPage({
   jobs,
   selectedJobId,
   onSelectJob,
-  onCandidatesFound
+  onCandidatesFound,
+  onReviewCandidate
 }: SearchPageProps) {
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState("10");
   const [runs, setRuns] = useState<SearchRun[]>([]);
-  const [latestCandidates, setLatestCandidates] = useState<Candidate[]>([]);
+  const [runDetails, setRunDetails] = useState<Record<string, SearchRunDetail>>({});
   const [status, setStatus] = useState("Choose a JD and create a search run.");
   const [isSearching, setIsSearching] = useState(false);
+  const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null;
+
+  useEffect(() => {
+    setQuery(searchQueryForJob(selectedJob));
+  }, [selectedJob]);
 
   useEffect(() => {
     if (!selectedJobId) {
       setRuns([]);
+      setRunDetails({});
       return;
     }
     let ignore = false;
@@ -34,6 +42,17 @@ export function SearchPage({
       .then((loadedRuns) => {
         if (!ignore) {
           setRuns(loadedRuns);
+          setRunDetails({});
+          loadedRuns.forEach((run) => {
+            api
+              .getSearchRun(run.id)
+              .then((detail) => {
+                if (!ignore) {
+                  setRunDetails((current) => ({ ...current, [run.id]: detail }));
+                }
+              })
+              .catch(() => undefined);
+          });
         }
       })
       .catch((error: unknown) => {
@@ -61,7 +80,6 @@ export function SearchPage({
         params: { limit: Number(limit) || 10 }
       });
       onCandidatesFound(result.candidates);
-      setLatestCandidates(result.candidates);
       setRuns((current) => [
         {
           id: result.id,
@@ -76,6 +94,21 @@ export function SearchPage({
         },
         ...current
       ]);
+      setRunDetails((current) => ({
+        ...current,
+        [result.id]: {
+          id: result.id,
+          job_id: selectedJobId,
+          query,
+          provider: "bright_data",
+          status: result.status,
+          params: { limit: Number(limit) || 10 },
+          candidate_count: result.candidates.length,
+          created_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          candidates: result.candidates
+        }
+      }));
       setStatus(`Search completed with ${result.candidates.length} candidates.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to create search run.");
@@ -142,20 +175,51 @@ export function SearchPage({
               <span>
                 {run.status} · {run.candidate_count} candidates
               </span>
+              <RunCandidates
+                candidates={runDetails[run.id]?.candidates ?? []}
+                onReviewCandidate={onReviewCandidate}
+              />
             </article>
           ))}
         </div>
-        {latestCandidates.length > 0 ? (
-          <div className="candidate-grid compact-candidates">
-            {latestCandidates.map((candidate) => (
-              <article key={candidate.id} className="candidate-card">
-                <h3>{candidate.name}</h3>
-                <p>{candidate.headline ?? "No headline captured"}</p>
-              </article>
-            ))}
-          </div>
-        ) : null}
       </div>
     </section>
+  );
+}
+
+function searchQueryForJob(job: Job | null): string {
+  if (job === null) {
+    return "";
+  }
+
+  return job.search_notes.trim() || job.description.trim() || job.title;
+}
+
+function RunCandidates({
+  candidates,
+  onReviewCandidate
+}: {
+  candidates: Candidate[];
+  onReviewCandidate: (candidate: Candidate) => void;
+}) {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="run-candidate-list">
+      {candidates.map((candidate) => (
+        <button
+          key={candidate.id}
+          type="button"
+          className="text-action run-candidate-row"
+          aria-label={`Open ${candidate.name}`}
+          onClick={() => onReviewCandidate(candidate)}
+        >
+          <strong>{candidate.name}</strong>
+          <span>{candidate.headline ?? "No headline captured"}</span>
+        </button>
+      ))}
+    </div>
   );
 }

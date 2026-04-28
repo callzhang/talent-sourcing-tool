@@ -327,6 +327,7 @@ h3 {
 
 .candidate-list,
 .candidate-detail,
+.run-candidate-list,
 .source-list {
   display: grid;
   gap: 12px;
@@ -335,6 +336,17 @@ h3 {
 .candidate-list-row span {
   color: var(--color-text-secondary);
   font-size: 0.875rem;
+}
+
+.run-candidate-row {
+  justify-items: start;
+  text-align: left;
+}
+
+.run-candidate-row span {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .create-job-panel {
