@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { api } from "../api";
 import type { Candidate, DraftPassReason, ReviewPayload, ReviewRead } from "../types";
@@ -9,23 +9,42 @@ type CandidateDetailPageProps = {
   onBack: () => void;
 };
 
+type ReviewContext = {
+  reviewId: string;
+  jobId: string;
+  candidateId: string;
+};
+
 export function CandidateDetailPage({
   selectedJobId,
   candidate,
   onBack
 }: CandidateDetailPageProps) {
   const [loadedCandidate, setLoadedCandidate] = useState<Candidate | null>(candidate);
-  const [reviewId, setReviewId] = useState<string | null>(null);
+  const [reviewContext, setReviewContext] = useState<ReviewContext | null>(null);
   const [review, setReview] = useState<ReviewPayload | null>(null);
   const [draft, setDraft] = useState<DraftPassReason | null>(null);
   const [notes, setNotes] = useState("");
   const [passReason, setPassReason] = useState("");
   const [status, setStatus] = useState("Ready for AI review.");
   const [isWorking, setIsWorking] = useState(false);
+  const currentContextRef = useRef({
+    selectedJobId,
+    candidateId: candidate?.id ?? null,
+    loadedCandidateId: loadedCandidate?.id ?? null,
+    reviewContext
+  });
+  currentContextRef.current = {
+    selectedJobId,
+    candidateId: candidate?.id ?? null,
+    loadedCandidateId: loadedCandidate?.id ?? null,
+    reviewContext
+  };
+  const reviewId = reviewContext?.reviewId ?? null;
 
   useEffect(() => {
     setLoadedCandidate(null);
-    setReviewId(null);
+    setReviewContext(null);
     setReview(null);
     setDraft(null);
     setNotes("");
@@ -51,7 +70,11 @@ export function CandidateDetailPage({
       .getLatestReview(selectedJobId, candidate.id)
       .then((latestReview: ReviewRead | null) => {
         if (!ignore && latestReview) {
-          setReviewId(latestReview.id);
+          setReviewContext({
+            reviewId: latestReview.id,
+            jobId: latestReview.job_id,
+            candidateId: latestReview.candidate_id
+          });
           setReview(latestReview.review);
           setStatus("Loaded latest review.");
         } else if (!ignore) {
@@ -69,6 +92,25 @@ export function CandidateDetailPage({
     candidate !== null &&
     loadedCandidate !== null &&
     loadedCandidate.id === candidate.id;
+
+  function isCurrentCandidateContext(jobId: string, candidateId: string) {
+    const currentContext = currentContextRef.current;
+    return (
+      currentContext.selectedJobId === jobId &&
+      currentContext.candidateId === candidateId &&
+      currentContext.loadedCandidateId === candidateId
+    );
+  }
+
+  function isCurrentReviewContext(jobId: string, candidateId: string, activeReviewId: string) {
+    const currentReviewContext = currentContextRef.current.reviewContext;
+    return (
+      isCurrentCandidateContext(jobId, candidateId) &&
+      currentReviewContext?.jobId === jobId &&
+      currentReviewContext.candidateId === candidateId &&
+      currentReviewContext.reviewId === activeReviewId
+    );
+  }
 
   if (!selectedJobId || !candidate) {
     return (
@@ -98,40 +140,79 @@ export function CandidateDetailPage({
     if (!selectedJobId || !loadedCandidate) {
       return;
     }
+    const requestedJobId = selectedJobId;
+    const requestedCandidateId = loadedCandidate.id;
     setIsWorking(true);
     setStatus("Running AI review...");
     try {
       const result = await api.startReview({
-        job_id: selectedJobId,
-        candidate_id: loadedCandidate.id
+        job_id: requestedJobId,
+        candidate_id: requestedCandidateId
       });
-      setReviewId(result.review_id);
+      if (!isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        return;
+      }
+      setReviewContext({
+        reviewId: result.review_id,
+        jobId: requestedJobId,
+        candidateId: requestedCandidateId
+      });
       setReview(result.review);
       setDraft(null);
       setStatus("AI review completed.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to start review.");
+      if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        setStatus(error instanceof Error ? error.message : "Unable to start review.");
+      }
     } finally {
-      setIsWorking(false);
+      if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        setIsWorking(false);
+      }
     }
   }
 
   async function draftPassReason() {
-    if (!reviewId) {
+    if (!reviewContext) {
       setStatus("Run a review before drafting a pass reason.");
       return;
     }
+    const requestedReviewContext = reviewContext;
     setIsWorking(true);
     setStatus("Drafting pass reason...");
     try {
-      const generatedDraft = await api.getDraftPassReason(reviewId);
+      const generatedDraft = await api.getDraftPassReason(requestedReviewContext.reviewId);
+      if (
+        !isCurrentReviewContext(
+          requestedReviewContext.jobId,
+          requestedReviewContext.candidateId,
+          requestedReviewContext.reviewId
+        )
+      ) {
+        return;
+      }
       setDraft(generatedDraft);
       setPassReason(generatedDraft.reason_text);
       setStatus("Draft pass reason ready.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to draft pass reason.");
+      if (
+        isCurrentReviewContext(
+          requestedReviewContext.jobId,
+          requestedReviewContext.candidateId,
+          requestedReviewContext.reviewId
+        )
+      ) {
+        setStatus(error instanceof Error ? error.message : "Unable to draft pass reason.");
+      }
     } finally {
-      setIsWorking(false);
+      if (
+        isCurrentReviewContext(
+          requestedReviewContext.jobId,
+          requestedReviewContext.candidateId,
+          requestedReviewContext.reviewId
+        )
+      ) {
+        setIsWorking(false);
+      }
     }
   }
 
@@ -139,27 +220,48 @@ export function CandidateDetailPage({
     if (!selectedJobId || !loadedCandidate) {
       return;
     }
+    const requestedJobId = selectedJobId;
+    const requestedCandidateId = loadedCandidate.id;
+    const requestedReviewContext = reviewContext;
+    const requestedDraft = draft;
     if (decision === "pass" && passReason.trim().length === 0) {
       setStatus("Pass decisions require a reason.");
+      return;
+    }
+    if (
+      !isCurrentCandidateContext(requestedJobId, requestedCandidateId) ||
+      (requestedReviewContext !== null &&
+        !isCurrentReviewContext(
+          requestedReviewContext.jobId,
+          requestedReviewContext.candidateId,
+          requestedReviewContext.reviewId
+        ))
+    ) {
       return;
     }
     setIsWorking(true);
     setStatus(`Saving ${decision} decision...`);
     try {
       await api.createDecision({
-        job_id: selectedJobId,
-        candidate_id: loadedCandidate.id,
-        review_id: reviewId ?? undefined,
+        job_id: requestedJobId,
+        candidate_id: requestedCandidateId,
+        review_id: requestedReviewContext?.reviewId,
         decision,
         notes,
-        pass_reason_code: draft?.reason_code ?? "manual_pass",
+        pass_reason_code: requestedDraft?.reason_code ?? "manual_pass",
         pass_reason_text: decision === "pass" ? passReason : undefined
       });
-      setStatus(`Saved ${decision} decision.`);
+      if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        setStatus(`Saved ${decision} decision.`);
+      }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to save decision.");
+      if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        setStatus(error instanceof Error ? error.message : "Unable to save decision.");
+      }
     } finally {
-      setIsWorking(false);
+      if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        setIsWorking(false);
+      }
     }
   }
 
