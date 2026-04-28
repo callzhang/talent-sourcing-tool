@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.db.models import Job, Rubric
@@ -57,3 +57,18 @@ def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -
 def list_jobs(session: Session = Depends(get_session)) -> list[JobRead]:
     jobs = session.exec(select(Job).order_by(Job.created_at.desc())).all()
     return [JobRead.model_validate(job) for job in jobs]
+
+
+@router.get("/{job_id}", response_model=JobWithRubric)
+def get_job(job_id: str, session: Session = Depends(get_session)) -> JobWithRubric:
+    job = session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    rubric = session.exec(
+        select(Rubric).where(Rubric.job_id == job.id).order_by(Rubric.created_at.desc())
+    ).first()
+    if rubric is None:
+        raise HTTPException(status_code=404, detail="Rubric not found")
+
+    return JobWithRubric(job=JobRead.model_validate(job), rubric=read_rubric(rubric))

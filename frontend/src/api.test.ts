@@ -39,3 +39,46 @@ it("throws an ApiError with status and backend detail for non-2xx responses", as
     } satisfies Partial<ApiError>
   );
 });
+
+it("exposes read endpoints needed by the task pages", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify(null), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    )
+  );
+
+  await api.getJob("job_1");
+  await api.listSearchRuns("job_1");
+  await api.getSearchRun("search_run_1");
+  await api.listCandidates("job_1");
+  await api.getCandidate("candidate_1", "job_1");
+  await api.getLatestReview("job_1", "candidate_1");
+
+  expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8000/api/jobs/job_1", {
+    headers: { "Content-Type": "application/json" }
+  });
+  expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:8000/api/search?job_id=job_1", {
+    headers: { "Content-Type": "application/json" }
+  });
+  expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:8000/api/search/search_run_1", {
+    headers: { "Content-Type": "application/json" }
+  });
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    4,
+    "http://localhost:8000/api/candidates?job_id=job_1",
+    { headers: { "Content-Type": "application/json" } }
+  );
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    5,
+    "http://localhost:8000/api/candidates/candidate_1?job_id=job_1",
+    { headers: { "Content-Type": "application/json" } }
+  );
+  expect(fetchMock).toHaveBeenNthCalledWith(
+    6,
+    "http://localhost:8000/api/reviews/latest?job_id=job_1&candidate_id=candidate_1",
+    { headers: { "Content-Type": "application/json" } }
+  );
+});

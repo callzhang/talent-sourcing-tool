@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.candidates import router as candidates_router
 from app.api.jobs import router as jobs_router
 from app.api.reviews import router as reviews_router
 from app.api.search import router as search_router
@@ -28,6 +29,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(candidates_router)
 app.include_router(jobs_router)
 app.include_router(reviews_router)
 app.include_router(search_router)

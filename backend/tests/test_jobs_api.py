@@ -7,7 +7,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, select
 
 from app.api import jobs
-from app.db.models import Job
+from app.db.models import Job, Rubric
 from app.db.session import create_db_engine, get_session
 from app.main import app
 
@@ -103,3 +103,47 @@ def test_create_job_rolls_back_when_rubric_insert_fails(
         saved_jobs = session.exec(select(Job)).all()
 
     assert saved_jobs == []
+
+
+def test_get_job_with_latest_rubric(client: TestClient, engine: Engine):
+    response = client.post(
+        "/api/jobs",
+        json={
+            "title": "AI Product Engineer",
+            "description": "Build AI prototypes.",
+            "target_profile_text": "Strong builder.",
+        },
+    )
+    assert response.status_code == 200
+    job_id = response.json()["job"]["id"]
+
+    with Session(engine) as session:
+        session.add(
+            Rubric(
+                job_id=job_id,
+                name="Updated rubric",
+                criteria=[
+                    {
+                        "version": 2,
+                        "source_hash": "updated",
+                        "dimensions": [{"name": "Updated dimension", "weight": 100}],
+                    }
+                ],
+            )
+        )
+        session.commit()
+
+    detail_response = client.get(f"/api/jobs/{job_id}")
+
+    assert detail_response.status_code == 200
+    data = detail_response.json()
+    assert data["job"]["id"] == job_id
+    assert data["rubric"]["version"] == 2
+    assert data["rubric"]["rubric"]["dimensions"][0]["name"] == "Updated dimension"
+
+
+def test_get_job_with_latest_rubric_404s_for_missing_job(client: TestClient):
+    response = client.get("/api/jobs/job_missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Job not found"

@@ -203,6 +203,62 @@ def test_draft_pass_reason_endpoint_returns_draft(client: TestClient, engine: En
     assert data["evidence"] == ["No public evidence of shipping AI products"]
 
 
+def test_get_latest_review_for_candidate_and_job(client: TestClient, engine: Engine):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        first_job = ReviewJob(job_id=job_id, candidate_id=candidate_id, status="completed")
+        session.add(first_job)
+        session.commit()
+        session.refresh(first_job)
+        session.add(
+            Review(
+                review_job_id=first_job.id,
+                summary="Older summary.",
+                evidence=[],
+                recommendation="pass",
+                score=4.0,
+                raw_review={"decision_summary": "Older summary.", "overall_score": 4.0},
+            )
+        )
+        second_job = ReviewJob(job_id=job_id, candidate_id=candidate_id, status="completed")
+        session.add(second_job)
+        session.commit()
+        session.refresh(second_job)
+        session.add(
+            Review(
+                review_job_id=second_job.id,
+                summary="Newer summary.",
+                evidence=[{"label": "launch", "detail": "Led AI launch"}],
+                recommendation="proceed",
+                score=8.0,
+                raw_review={
+                    "decision_summary": "Newer summary.",
+                    "overall_score": 8.0,
+                    "recommendation": "proceed",
+                    "evidence": [{"label": "launch", "detail": "Led AI launch"}],
+                },
+            )
+        )
+        session.commit()
+
+    response = client.get(f"/api/reviews/latest?job_id={job_id}&candidate_id={candidate_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"] == "Newer summary."
+    assert data["review"]["recommendation"] == "proceed"
+    assert data["review"]["evidence"][0]["label"] == "launch"
+
+
+def test_get_latest_review_returns_null_when_absent(client: TestClient, engine: Engine):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    response = client.get(f"/api/reviews/latest?job_id={job_id}&candidate_id={candidate_id}")
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
 def test_draft_pass_reason_endpoint_404s_for_missing_review(client: TestClient):
     response = client.get("/api/reviews/review_missing/draft-pass-reason")
 

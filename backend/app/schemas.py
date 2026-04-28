@@ -64,6 +64,41 @@ class CandidateRead(BaseModel):
     updated_at: datetime
 
 
+class CandidateListItem(CandidateRead):
+    last_search_run_id: str | None = None
+    last_search_query: str | None = None
+    last_search_rank: int | None = None
+
+
+class SearchRunRead(BaseModel):
+    id: str
+    job_id: str
+    query: str
+    provider: str
+    status: str
+    params: dict[str, Any]
+    candidate_count: int
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class SearchRunDetail(SearchRunRead):
+    candidates: list[CandidateRead]
+
+
+class ReviewRead(BaseModel):
+    id: str
+    review_job_id: str
+    job_id: str
+    candidate_id: str
+    summary: str
+    evidence: list[dict[str, Any]]
+    recommendation: str
+    score: float | None
+    review: dict[str, Any]
+    created_at: datetime
+
+
 class ReviewStart(BaseModel):
     job_id: str
     candidate_id: str

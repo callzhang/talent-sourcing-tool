@@ -1,10 +1,14 @@
 import type {
+  Candidate,
   CandidateDecision,
   DraftPassReason,
   Job,
   JobWithRubric,
   RefinementSuggestion,
+  ReviewRead,
   ReviewStartResult,
+  SearchRun,
+  SearchRunDetail,
   SearchRunResult
 } from "./types";
 
@@ -113,11 +117,36 @@ export const api = {
   listJobs() {
     return request<Job[]>("/api/jobs");
   },
+  getJob(jobId: string) {
+    return request<JobWithRubric>(`/api/jobs/${encodeURIComponent(jobId)}`);
+  },
   createSearch(payload: CreateSearchPayload) {
     return request<SearchRunResult>("/api/search", { method: "POST", body: payload });
   },
+  listSearchRuns(jobId?: string) {
+    const query = jobId ? `?job_id=${encodeURIComponent(jobId)}` : "";
+    return request<SearchRun[]>(`/api/search${query}`);
+  },
+  getSearchRun(searchRunId: string) {
+    return request<SearchRunDetail>(`/api/search/${encodeURIComponent(searchRunId)}`);
+  },
+  listCandidates(jobId?: string) {
+    const query = jobId ? `?job_id=${encodeURIComponent(jobId)}` : "";
+    return request<Candidate[]>(`/api/candidates${query}`);
+  },
+  getCandidate(candidateId: string, jobId?: string) {
+    const query = jobId ? `?job_id=${encodeURIComponent(jobId)}` : "";
+    return request<Candidate>(`/api/candidates/${encodeURIComponent(candidateId)}${query}`);
+  },
   startReview(payload: StartReviewPayload) {
     return request<ReviewStartResult>("/api/reviews/start", { method: "POST", body: payload });
+  },
+  getLatestReview(jobId: string, candidateId: string) {
+    return request<ReviewRead | null>(
+      `/api/reviews/latest?job_id=${encodeURIComponent(jobId)}&candidate_id=${encodeURIComponent(
+        candidateId
+      )}`
+    );
   },
   getDraftPassReason(reviewId: string) {
     return request<DraftPassReason>(

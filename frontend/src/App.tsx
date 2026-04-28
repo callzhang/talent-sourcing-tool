@@ -1,39 +1,61 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import "./App.css";
+import { api } from "./api";
+import { CandidateDetailPage } from "./pages/CandidateDetailPage";
+import { CandidatesPage } from "./pages/CandidatesPage";
+import { JobsPage } from "./pages/JobsPage";
+import { RefinementsPage } from "./pages/RefinementsPage";
+import { SearchPage } from "./pages/SearchPage";
+import type { Candidate, Job, JobWithRubric } from "./types";
 
-type Page = "jobs" | "search" | "candidates" | "refinements";
+type Page = "jobs" | "search" | "candidates" | "candidate-detail" | "refinements";
 
-const pages: Array<{ id: Page; label: string; title: string; description: string }> = [
-  {
-    id: "jobs",
-    label: "Jobs",
-    title: "JD Management",
-    description: "Create job descriptions and review generated rubric structure."
-  },
-  {
-    id: "search",
-    label: "Search",
-    title: "Search Runs",
-    description: "Prepare Bright Data search queries against the selected JD."
-  },
-  {
-    id: "candidates",
-    label: "Candidates",
-    title: "Candidates",
-    description: "Review sourced LinkedIn profiles and queue deep AI reviews."
-  },
-  {
-    id: "refinements",
-    label: "Refinements",
-    title: "Refinement Suggestions",
-    description: "Use pass reasons and proceed signals to improve sourcing."
-  }
+const pages: Array<{ id: Exclude<Page, "candidate-detail">; label: string }> = [
+  { id: "jobs", label: "Jobs" },
+  { id: "search", label: "Search" },
+  { id: "candidates", label: "Candidates" },
+  { id: "refinements", label: "Refinements" }
 ];
 
 export function App() {
   const [page, setPage] = useState<Page>("jobs");
-  const activePage = pages.find((item) => item.id === page) ?? pages[0];
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    api
+      .listJobs()
+      .then((loadedJobs) => {
+        if (ignore) {
+          return;
+        }
+        setJobs(loadedJobs);
+        if (!selectedJobId && loadedJobs[0]) {
+          setSelectedJobId(loadedJobs[0].id);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  function handleCreatedJob(jobWithRubric: JobWithRubric) {
+    setJobs((currentJobs) => [
+      jobWithRubric.job,
+      ...currentJobs.filter((job) => job.id !== jobWithRubric.job.id)
+    ]);
+    setSelectedJobId(jobWithRubric.job.id);
+  }
+
+  function handleReviewCandidate(candidate: Candidate) {
+    setSelectedCandidate(candidate);
+    setPage("candidate-detail");
+  }
 
   return (
     <main className="app-shell">
@@ -60,17 +82,43 @@ export function App() {
         </nav>
       </header>
 
-      <section className="panel" aria-labelledby={`${activePage.id}-heading`}>
-        <div>
-          <p className="panel-kicker">Task workspace</p>
-          <h2 id={`${activePage.id}-heading`}>{activePage.title}</h2>
-          <p>{activePage.description}</p>
-        </div>
-        <div className="panel-note">
-          Later tasks can replace this placeholder with the dedicated page component without changing
-          the shell navigation contract.
-        </div>
-      </section>
+      {page === "jobs" ? (
+        <JobsPage
+          selectedJobId={selectedJobId}
+          onSelectJob={setSelectedJobId}
+          onCreatedJob={handleCreatedJob}
+        />
+      ) : null}
+      {page === "search" ? (
+        <SearchPage
+          jobs={jobs}
+          selectedJobId={selectedJobId}
+          onSelectJob={setSelectedJobId}
+          onCandidatesFound={setCandidates}
+        />
+      ) : null}
+      {page === "candidates" ? (
+        <CandidatesPage
+          selectedJobId={selectedJobId}
+          candidates={candidates}
+          onLoadedCandidates={setCandidates}
+          onReviewCandidate={handleReviewCandidate}
+        />
+      ) : null}
+      {page === "candidate-detail" ? (
+        <CandidateDetailPage
+          selectedJobId={selectedJobId}
+          candidate={selectedCandidate}
+          onBack={() => setPage("candidates")}
+        />
+      ) : null}
+      {page === "refinements" ? (
+        <RefinementsPage
+          jobs={jobs}
+          selectedJobId={selectedJobId}
+          onSelectJob={setSelectedJobId}
+        />
+      ) : null}
     </main>
   );
 }

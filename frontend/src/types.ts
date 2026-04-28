@@ -56,11 +56,30 @@ export type Candidate = {
   profile_data: CandidateProfileData;
   created_at: ISODateString;
   updated_at: ISODateString;
+  last_search_run_id?: string | null;
+  last_search_query?: string | null;
+  last_search_rank?: number | null;
 };
 
 export type SearchRunResult = {
   id: string;
   status: "completed" | "failed" | "running" | string;
+  candidates: Candidate[];
+};
+
+export type SearchRun = {
+  id: string;
+  job_id: string;
+  query: string;
+  provider: string;
+  status: string;
+  params: Record<string, unknown>;
+  candidate_count: number;
+  created_at: ISODateString;
+  completed_at: ISODateString | null;
+};
+
+export type SearchRunDetail = SearchRun & {
   candidates: Candidate[];
 };
 
@@ -79,6 +98,19 @@ export type ReviewStartResult = {
   review_job_id: string;
   review_id: string;
   review: ReviewPayload;
+};
+
+export type ReviewRead = {
+  id: string;
+  review_job_id: string;
+  job_id: string;
+  candidate_id: string;
+  summary: string;
+  evidence: Array<Record<string, unknown>>;
+  recommendation: ReviewRecommendation;
+  score: number | null;
+  review: ReviewPayload;
+  created_at: ISODateString;
 };
 
 export type DraftPassReason = {

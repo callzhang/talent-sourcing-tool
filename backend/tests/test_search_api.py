@@ -77,6 +77,46 @@ def test_search_upserts_candidates_by_linkedin_url(client: TestClient, engine: E
     assert len(candidates) == 2
 
 
+def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: TestClient):
+    job_id = create_job(client)
+    first_response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "founding PMM AI startup", "params": {"limit": 1}},
+    )
+    second_response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "AI product marketer", "params": {"limit": 2}},
+    )
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    response = client.get(f"/api/search?job_id={job_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [run["query"] for run in data] == ["AI product marketer", "founding PMM AI startup"]
+    assert data[0]["candidate_count"] == 2
+    assert data[0]["params"] == {"limit": 2}
+
+
+def test_get_search_run_returns_candidates(client: TestClient):
+    job_id = create_job(client)
+    create_response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "founding PMM AI startup", "params": {"limit": 1}},
+    )
+    assert create_response.status_code == 200
+    search_run_id = create_response.json()["id"]
+
+    response = client.get(f"/api/search/{search_run_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == search_run_id
+    assert data["query"] == "founding PMM AI startup"
+    assert len(data["candidates"]) == 1
+
+
 def test_search_returns_404_when_job_does_not_exist(client: TestClient):
     response = client.post(
         "/api/search",

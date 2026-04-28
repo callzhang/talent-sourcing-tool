@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from app.db.models import Candidate, Job, SearchResult, SearchRun
 from app.db.session import get_session
-from app.schemas import CandidateRead, SearchCreate
+from app.schemas import CandidateRead, SearchCreate, SearchRunDetail, SearchRunRead
 from app.services.sourcing import CandidateSourceResult, get_sourcing_connector
 
 router = APIRouter(prefix="/api/search", tags=["search"])
@@ -138,6 +138,72 @@ def upsert_candidate(session: Session, result: CandidateSourceResult) -> Candida
         session.add(candidate)
         session.flush()
     return candidate
+
+
+def search_run_params(search_run: SearchRun) -> dict[str, Any]:
+    params = search_run.run_metadata.get("params", {})
+    return params if isinstance(params, dict) else {}
+
+
+def candidate_count_for_run(session: Session, search_run_id: str) -> int:
+    return len(
+        session.exec(
+            select(SearchResult.id).where(SearchResult.search_run_id == search_run_id)
+        ).all()
+    )
+
+
+def read_search_run(session: Session, search_run: SearchRun) -> SearchRunRead:
+    return SearchRunRead(
+        id=search_run.id,
+        job_id=search_run.job_id,
+        query=search_run.query,
+        provider=search_run.provider,
+        status=search_run.status,
+        params=search_run_params(search_run),
+        candidate_count=candidate_count_for_run(session, search_run.id),
+        created_at=search_run.created_at,
+        completed_at=search_run.completed_at,
+    )
+
+
+@router.get("", response_model=list[SearchRunRead])
+def list_search_runs(
+    job_id: str | None = None, session: Session = Depends(get_session)
+) -> list[SearchRunRead]:
+    statement = select(SearchRun).order_by(SearchRun.created_at.desc())
+    if job_id is not None:
+        statement = statement.where(SearchRun.job_id == job_id)
+    search_runs = session.exec(statement).all()
+    return [read_search_run(session, search_run) for search_run in search_runs]
+
+
+@router.get("/{search_run_id}", response_model=SearchRunDetail)
+def get_search_run(
+    search_run_id: str, session: Session = Depends(get_session)
+) -> SearchRunDetail:
+    search_run = session.get(SearchRun, search_run_id)
+    if search_run is None:
+        raise HTTPException(status_code=404, detail="Search run not found")
+
+    search_results = session.exec(
+        select(SearchResult)
+        .where(SearchResult.search_run_id == search_run.id)
+        .order_by(SearchResult.rank.asc())
+    ).all()
+    candidates = [
+        candidate
+        for candidate in (
+            session.get(Candidate, search_result.candidate_id)
+            for search_result in search_results
+            if search_result.candidate_id is not None
+        )
+        if candidate is not None
+    ]
+    return SearchRunDetail(
+        **read_search_run(session, search_run).model_dump(),
+        candidates=[CandidateRead.model_validate(candidate) for candidate in candidates],
+    )
 
 
 @router.post("")

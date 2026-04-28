@@ -1,6 +1,6 @@
 :root {
-  color: #162018;
-  background: #f4f0e5;
+  color: #17211a;
+  background: #f3ead6;
   font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -15,16 +15,40 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 12% 16%, rgb(246 172 79 / 28%), transparent 28rem),
-    linear-gradient(135deg, #fffaf0 0%, #ece6d2 48%, #dfe8d4 100%);
+    radial-gradient(circle at 11% 10%, rgb(224 139 59 / 32%), transparent 27rem),
+    radial-gradient(circle at 88% 20%, rgb(61 113 73 / 22%), transparent 23rem),
+    linear-gradient(135deg, #fff9ea 0%, #eadfc4 52%, #dfe7d4 100%);
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font: inherit;
 }
 
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid rgb(23 33 26 / 18%);
+  border-radius: 16px;
+  padding: 12px 14px;
+  color: #17211a;
+  background: rgb(255 252 244 / 88%);
+}
+
+textarea {
+  resize: vertical;
+}
+
+a {
+  color: #7a4b17;
+  font-weight: 800;
+}
+
 .app-shell {
-  width: min(1120px, calc(100% - 32px));
+  width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
   padding: 36px 0;
 }
@@ -36,23 +60,24 @@ button {
   align-items: end;
   padding: 32px;
   border: 1px solid rgb(22 32 24 / 14%);
-  border-radius: 28px;
+  border-radius: 30px;
   background: rgb(255 252 244 / 78%);
   box-shadow: 0 24px 70px rgb(50 45 32 / 14%);
 }
 
 .eyebrow,
-.panel-kicker {
+.section-kicker {
   margin: 0 0 10px;
   color: #7a4b17;
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 h1,
 h2,
+h3,
 p {
   margin-top: 0;
 }
@@ -68,30 +93,46 @@ h1 {
 
 h2 {
   margin-bottom: 12px;
-  font-size: clamp(2rem, 4vw, 3.8rem);
+  font-size: clamp(2rem, 4vw, 3.7rem);
   letter-spacing: -0.055em;
+}
+
+h3 {
+  margin-bottom: 10px;
+  font-size: 1.35rem;
+}
+
+.hero-copy,
+.muted,
+.empty-state {
+  color: #566051;
 }
 
 .hero-copy {
   max-width: 620px;
   margin-bottom: 0;
-  color: #4f594e;
   font-size: 1.08rem;
 }
 
-.tabs {
+.tabs,
+.action-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 10px;
 }
 
-.tab {
+.tabs {
+  justify-content: flex-end;
+}
+
+.tab,
+.primary-action,
+.secondary-action,
+.danger-action,
+.text-action {
   border: 1px solid rgb(22 32 24 / 16%);
   border-radius: 999px;
   padding: 10px 16px;
-  color: #273127;
-  background: #fffaf0;
   cursor: pointer;
   transition:
     transform 160ms ease,
@@ -99,52 +140,200 @@ h2 {
     color 160ms ease;
 }
 
-.tab:hover {
+.tab,
+.secondary-action,
+.text-action {
+  color: #273127;
+  background: #fffaf0;
+}
+
+.tab:hover,
+.primary-action:hover,
+.secondary-action:hover,
+.danger-action:hover,
+.text-action:hover {
   transform: translateY(-1px);
 }
 
-.tab[aria-pressed="true"] {
+.tab[aria-pressed="true"],
+.primary-action {
   color: #fffaf0;
   background: #1f321f;
 }
 
-.panel {
+.danger-action {
+  color: #fffaf0;
+  background: #8a321f;
+}
+
+.text-action {
+  width: fit-content;
+  margin-bottom: 20px;
+}
+
+.workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.15fr);
   gap: 24px;
   margin-top: 24px;
-  padding: 32px;
+}
+
+.detail-grid {
+  grid-template-columns: minmax(260px, 0.7fr) minmax(320px, 1fr);
+}
+
+.card {
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid rgb(22 32 24 / 12%);
   border-radius: 28px;
-  color: #fdf6e6;
+  background: rgb(255 252 244 / 82%);
+  box-shadow: 0 18px 50px rgb(50 45 32 / 10%);
+}
+
+.card-form {
   background:
-    linear-gradient(145deg, rgb(31 50 31 / 92%), rgb(42 71 54 / 90%)),
+    linear-gradient(145deg, rgb(31 50 31 / 94%), rgb(45 76 57 / 92%)),
     #1f321f;
+  color: #fdf6e6;
 }
 
-.panel p {
-  max-width: 620px;
-  margin-bottom: 0;
-  color: rgb(253 246 230 / 76%);
+.card-form .section-kicker,
+.card-form .muted {
+  color: #f0be77;
 }
 
-.panel-kicker {
-  color: #e9a856;
+.card-form input,
+.card-form textarea,
+.card-form select {
+  border-color: rgb(253 246 230 / 22%);
+  color: #fdf6e6;
+  background: rgb(253 246 230 / 10%);
 }
 
-.panel-note {
-  align-self: stretch;
-  padding: 18px;
-  border: 1px solid rgb(253 246 230 / 18%);
+.stack {
+  display: grid;
+  gap: 16px;
+}
+
+.stack label,
+.card label {
+  display: grid;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.split-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.split-heading span,
+.rank-pill,
+.score-badge {
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #1f321f;
+  background: #eac077;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.job-list,
+.rubric-list,
+.refinement-grid,
+.compact-list {
+  display: grid;
+  gap: 12px;
+}
+
+.list-row,
+.rubric-item,
+.candidate-card,
+.refinement-card,
+.evidence-card {
+  border: 1px solid rgb(22 32 24 / 12%);
   border-radius: 20px;
-  color: rgb(253 246 230 / 78%);
-  background: rgb(253 246 230 / 8%);
+  padding: 16px;
+  background: rgb(255 255 255 / 42%);
 }
 
-@media (max-width: 760px) {
+.list-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+}
+
+.list-row[aria-pressed="true"] {
+  border-color: rgb(31 50 31 / 42%);
+  background: #e6efd9;
+}
+
+.static-row {
+  display: grid;
+}
+
+.rubric-list,
+.candidate-grid,
+.refinement-grid,
+.review-block {
+  margin-top: 18px;
+}
+
+.rubric-item {
+  display: grid;
+  gap: 8px;
+}
+
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.candidate-card {
+  display: grid;
+  gap: 18px;
+}
+
+.review-block {
+  display: grid;
+  gap: 12px;
+}
+
+.score-badge {
+  width: fit-content;
+  font-size: 1.2rem;
+}
+
+.evidence-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.evidence-card {
+  display: grid;
+  gap: 6px;
+}
+
+.compact-list {
+  padding-left: 20px;
+}
+
+@media (max-width: 820px) {
   .hero,
-  .panel {
+  .workspace-grid,
+  .detail-grid {
     grid-template-columns: 1fr;
-    padding: 24px;
+  }
+
+  .hero,
+  .card {
+    padding: 22px;
   }
 
   .tabs {

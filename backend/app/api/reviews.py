@@ -18,7 +18,7 @@ from app.db.models import (
     Rubric,
 )
 from app.db.session import get_session
-from app.schemas import DecisionCreate, ReviewStart
+from app.schemas import DecisionCreate, ReviewRead, ReviewStart
 from app.services.pass_reason import draft_pass_reason, suggest_refinements
 from app.services.review_worker import ReviewWorker
 
@@ -147,6 +147,53 @@ def _suggestion_signature(
         suggestion_text,
         _normalized_reason_codes(reason_codes),
     )
+
+
+def read_review(session: Session, review: Review) -> ReviewRead:
+    review_job = session.get(ReviewJob, review.review_job_id)
+    if review_job is None:
+        raise HTTPException(status_code=404, detail="Review job not found")
+    return ReviewRead(
+        id=review.id,
+        review_job_id=review.review_job_id,
+        job_id=review_job.job_id,
+        candidate_id=review_job.candidate_id,
+        summary=review.summary,
+        evidence=review.evidence,
+        recommendation=review.recommendation,
+        score=review.score,
+        review=review.raw_review,
+        created_at=review.created_at,
+    )
+
+
+@router.get("/latest", response_model=ReviewRead | None)
+def get_latest_review(
+    job_id: str,
+    candidate_id: str,
+    session: Session = Depends(get_session),
+) -> ReviewRead | None:
+    if session.get(Job, job_id) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if session.get(Candidate, candidate_id) is None:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    review_jobs = session.exec(
+        select(ReviewJob.id)
+        .where(ReviewJob.job_id == job_id, ReviewJob.candidate_id == candidate_id)
+        .order_by(ReviewJob.created_at.desc())
+    ).all()
+    if not review_jobs:
+        return None
+
+    review = session.exec(
+        select(Review)
+        .where(col(Review.review_job_id).in_(review_jobs))
+        .order_by(Review.created_at.desc())
+    ).first()
+    if review is None:
+        return None
+    return read_review(session, review)
 
 
 @router.post("/start")
