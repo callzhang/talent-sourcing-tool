@@ -36,6 +36,9 @@ it("creates a job, displays its rubric, and uses it for search and candidates", 
     if (url.endsWith("/api/jobs") && method === "POST") {
       return jsonResponse(jobWithRubric);
     }
+    if (url.endsWith("/api/jobs/job_1")) {
+      return jsonResponse(jobWithRubric);
+    }
     if (url.endsWith("/api/search?job_id=job_1")) {
       return jsonResponse([]);
     }

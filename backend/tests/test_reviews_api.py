@@ -501,3 +501,54 @@ def test_proceed_decision_creates_candidate_decision(client: TestClient, engine:
     assert decision.notes == "Move to recruiter screen."
     assert decision.decided_by == "test-user"
     assert pass_reasons == []
+
+
+def test_decision_rejects_review_owned_by_different_candidate(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        other_candidate = Candidate(
+            linkedin_url="https://www.linkedin.com/in/other-candidate",
+            name="Other Candidate",
+            profile_data={},
+        )
+        session.add(other_candidate)
+        session.commit()
+        session.refresh(other_candidate)
+        review_job = ReviewJob(
+            job_id=job_id,
+            candidate_id=other_candidate.id,
+            status="completed",
+        )
+        session.add(review_job)
+        session.commit()
+        session.refresh(review_job)
+        review = Review(
+            review_job_id=review_job.id,
+            summary="Other candidate review.",
+            evidence=[],
+            recommendation="proceed",
+            score=8.0,
+            raw_review={"decision_summary": "Other candidate review."},
+        )
+        session.add(review)
+        session.commit()
+        session.refresh(review)
+        review_id = review.id
+
+    response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "review_id": review_id,
+            "decision": "proceed",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Review does not belong to job and candidate"
+
+    with Session(engine) as session:
+        assert session.exec(select(CandidateDecision)).all() == []

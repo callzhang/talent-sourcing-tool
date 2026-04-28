@@ -307,8 +307,21 @@ def create_decision(
     candidate = session.get(Candidate, decision_create.candidate_id)
     if candidate is None:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    if decision_create.review_id is not None and session.get(Review, decision_create.review_id) is None:
-        raise HTTPException(status_code=404, detail="Review not found")
+    if decision_create.review_id is not None:
+        review = session.get(Review, decision_create.review_id)
+        if review is None:
+            raise HTTPException(status_code=404, detail="Review not found")
+        review_job = session.get(ReviewJob, review.review_job_id)
+        if review_job is None:
+            raise HTTPException(status_code=404, detail="Review job not found")
+        if (
+            review_job.job_id != decision_create.job_id
+            or review_job.candidate_id != decision_create.candidate_id
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Review does not belong to job and candidate",
+            )
 
     decision = CandidateDecision(
         job_id=decision_create.job_id,

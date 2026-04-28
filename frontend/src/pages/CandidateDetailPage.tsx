@@ -24,10 +24,21 @@ export function CandidateDetailPage({
   const [isWorking, setIsWorking] = useState(false);
 
   useEffect(() => {
+    setLoadedCandidate(null);
+    setReviewId(null);
+    setReview(null);
+    setDraft(null);
+    setNotes("");
+    setPassReason("");
+    setIsWorking(false);
+
     if (!candidate || !selectedJobId) {
+      setStatus("Ready for AI review.");
       return;
     }
+
     let ignore = false;
+    setStatus("Loading candidate review context...");
     api
       .getCandidate(candidate.id, selectedJobId)
       .then((freshCandidate) => {
@@ -43,6 +54,8 @@ export function CandidateDetailPage({
           setReviewId(latestReview.id);
           setReview(latestReview.review);
           setStatus("Loaded latest review.");
+        } else if (!ignore) {
+          setStatus("Ready for AI review.");
         }
       })
       .catch(() => undefined);
@@ -51,7 +64,13 @@ export function CandidateDetailPage({
     };
   }, [candidate, selectedJobId]);
 
-  if (!selectedJobId || !loadedCandidate) {
+  const isCandidateContextReady =
+    selectedJobId !== null &&
+    candidate !== null &&
+    loadedCandidate !== null &&
+    loadedCandidate.id === candidate.id;
+
+  if (!selectedJobId || !candidate) {
     return (
       <section className="card">
         <button type="button" className="text-action" onClick={onBack}>
@@ -59,6 +78,18 @@ export function CandidateDetailPage({
         </button>
         <h2>Candidate Review</h2>
         <p className="empty-state">Select a searched candidate to review.</p>
+      </section>
+    );
+  }
+
+  if (!isCandidateContextReady) {
+    return (
+      <section className="card">
+        <button type="button" className="text-action" onClick={onBack}>
+          Back to candidates
+        </button>
+        <h2>Candidate Review</h2>
+        <p className="empty-state">Loading candidate review context...</p>
       </section>
     );
   }
