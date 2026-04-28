@@ -23,7 +23,6 @@ class JobRead(BaseModel):
     target_profile_text: str
     red_flags_text: str
     search_notes: str
-    status: str
     created_at: datetime
     updated_at: datetime
 

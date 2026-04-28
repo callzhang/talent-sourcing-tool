@@ -111,7 +111,6 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
               onClick={() => onSelectJob(job.id)}
             >
               <strong>{job.title}</strong>
-              <span>{job.status}</span>
             </button>
           ))}
         </div>

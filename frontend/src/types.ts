@@ -1,7 +1,5 @@
 export type ISODateString = string;
 
-export type JobStatus = "active" | "archived" | string;
-
 export type Job = {
   id: string;
   title: string;
@@ -9,7 +7,6 @@ export type Job = {
   target_profile_text: string;
   red_flags_text: string;
   search_notes: string;
-  status: JobStatus;
   created_at: ISODateString;
   updated_at: ISODateString;
 };

@@ -156,7 +156,6 @@ const jobWithRubric = {
     target_profile_text: "",
     red_flags_text: "",
     search_notes: "",
-    status: "draft",
     created_at: "2026-04-28T12:00:00Z",
     updated_at: "2026-04-28T12:00:00Z"
   },

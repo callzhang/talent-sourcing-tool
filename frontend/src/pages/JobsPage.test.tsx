@@ -98,6 +98,7 @@ it("renders job listings in the left pane and selected job detail in the right p
 
   expect(listingsPane).toContainElement(screen.getByRole("button", { name: /AI Product Engineer/ }));
   expect(detailPane).toContainElement(screen.getByText("Build customer demos."));
+  expect(listingsPane).not.toHaveTextContent("draft");
   expect(listingsPane.compareDocumentPosition(detailPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
@@ -224,7 +225,6 @@ const job = {
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "",
-  status: "draft",
   created_at: "2026-04-28T12:00:00Z",
   updated_at: "2026-04-28T12:00:00Z"
 };

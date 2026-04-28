@@ -50,6 +50,7 @@ def test_create_job_generates_rubric(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert data["job"]["title"] == payload["title"]
+    assert "status" not in data["job"]
     assert data["job"]["target_profile_text"] == payload["target_profile_text"]
     assert data["job"]["red_flags_text"] == payload["red_flags_text"]
     assert data["job"]["search_notes"] == payload["search_notes"]
@@ -160,6 +161,48 @@ def test_list_jobs_returns_created_jobs(client: TestClient):
 
     assert list_response.status_code == 200
     assert list_response.json()[0]["title"] == "AI Product Engineer"
+    assert "status" not in list_response.json()[0]
+
+
+def test_create_job_reuses_existing_job_with_same_title(client: TestClient, engine: Engine):
+    payload = {
+        "title": "AI Product Engineer",
+        "description": "Build demos.",
+        "target_profile_text": "AI-native builder.",
+    }
+
+    first_response = client.post("/api/jobs", json=payload)
+    second_response = client.post("/api/jobs", json={**payload, "description": "Duplicate draft."})
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json()["job"]["id"] == first_response.json()["job"]["id"]
+
+    with Session(engine) as session:
+        saved_jobs = session.exec(select(Job)).all()
+
+    assert len(saved_jobs) == 1
+    assert saved_jobs[0].description == "Build demos."
+
+
+def test_list_jobs_collapses_legacy_duplicate_titles(client: TestClient, engine: Engine):
+    with Session(engine) as session:
+        older = Job(title="AI Product Engineer", description="Older duplicate")
+        newer = Job(title="AI Product Engineer", description="Newest duplicate")
+        other = Job(title="Business Intern", description="Support sourcing")
+        session.add(older)
+        session.add(newer)
+        session.add(other)
+        session.commit()
+
+    response = client.get("/api/jobs")
+
+    assert response.status_code == 200
+    titles = [job["title"] for job in response.json()]
+    assert titles == ["Business Intern", "AI Product Engineer"]
+    assert [job["description"] for job in response.json() if job["title"] == "AI Product Engineer"] == [
+        "Newest duplicate"
+    ]
 
 
 def test_get_job_404s_when_rubric_missing(client: TestClient, engine: Engine):

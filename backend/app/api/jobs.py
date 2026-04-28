@@ -13,6 +13,10 @@ from app.services.rubric import rubric_to_json
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
+def job_title_key(title: str) -> str:
+    return " ".join(title.casefold().split())
+
+
 def read_rubric(rubric: Rubric) -> RubricRead:
     rubric_payload = rubric.criteria[0] if rubric.criteria else {}
     return RubricRead(
@@ -28,16 +32,31 @@ def read_rubric(rubric: Rubric) -> RubricRead:
 
 @router.post("", response_model=JobWithRubric)
 def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -> JobWithRubric:
-    job = Job(
-        title=job_create.title,
-        description=job_create.description,
-        target_profile_text=job_create.target_profile_text,
-        red_flags_text=job_create.red_flags_text,
-        search_notes=job_create.search_notes,
-    )
-    rubric_payload = json.loads(rubric_to_json(job_create))
+    title_key = job_title_key(job_create.title)
 
     with session.begin():
+        existing_jobs = session.exec(select(Job).order_by(Job.created_at.desc())).all()
+        for existing_job in existing_jobs:
+            if job_title_key(existing_job.title) == title_key:
+                rubric = session.exec(
+                    select(Rubric)
+                    .where(Rubric.job_id == existing_job.id)
+                    .order_by(Rubric.created_at.desc())
+                ).first()
+                if rubric is None:
+                    raise HTTPException(status_code=409, detail="Existing job has no rubric")
+                return JobWithRubric(
+                    job=JobRead.model_validate(existing_job), rubric=read_rubric(rubric)
+                )
+
+        rubric_payload = json.loads(rubric_to_json(job_create))
+        job = Job(
+            title=job_create.title,
+            description=job_create.description,
+            target_profile_text=job_create.target_profile_text,
+            red_flags_text=job_create.red_flags_text,
+            search_notes=job_create.search_notes,
+        )
         session.add(job)
         session.flush()
         rubric = Rubric(
@@ -56,7 +75,15 @@ def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -
 @router.get("", response_model=list[JobRead])
 def list_jobs(session: Session = Depends(get_session)) -> list[JobRead]:
     jobs = session.exec(select(Job).order_by(Job.created_at.desc())).all()
-    return [JobRead.model_validate(job) for job in jobs]
+    unique_jobs: list[Job] = []
+    seen_titles: set[str] = set()
+    for job in jobs:
+        title_key = job_title_key(job.title)
+        if title_key in seen_titles:
+            continue
+        seen_titles.add(title_key)
+        unique_jobs.append(job)
+    return [JobRead.model_validate(job) for job in unique_jobs]
 
 
 @router.get("/{job_id}", response_model=JobWithRubric)
