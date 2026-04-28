@@ -108,9 +108,18 @@ def _safe_scalar_text(value: Any) -> str | None:
     return None
 
 
+def _safe_reason_code(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    reason_code = value.strip()
+    if reason_code:
+        return reason_code
+    return None
+
+
 def _structured_reason_code(review: dict[str, Any]) -> str:
     for key in ("pass_reason_code", "primary_gap_code", "reason_code", "gap_code"):
-        reason_code = _safe_scalar_text(review.get(key))
+        reason_code = _safe_reason_code(review.get(key))
         if reason_code:
             return reason_code
 
@@ -125,7 +134,7 @@ def _structured_reason_code(review: dict[str, Any]) -> str:
             and score < LOW_SCORE_THRESHOLD
         ):
             for key in ("reason_code", "gap_code", "pass_reason_code", "primary_gap_code"):
-                reason_code = _safe_scalar_text(dimension.get(key))
+                reason_code = _safe_reason_code(dimension.get(key))
                 if reason_code:
                     dimension_codes.append((float(score), reason_code))
                     break

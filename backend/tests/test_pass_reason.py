@@ -47,6 +47,28 @@ def test_draft_pass_reason_does_not_route_from_dimension_names_or_risk_keywords(
     assert draft["reason_code"] == "insufficient_public_evidence"
 
 
+@pytest.mark.parametrize(
+    "reason_code",
+    [True, False, 0, 1, 12.5, "", "   "],
+)
+def test_draft_pass_reason_ignores_malformed_review_level_reason_codes(reason_code):
+    draft = draft_pass_reason({"reason_code": reason_code})
+
+    assert draft["reason_code"] == "insufficient_public_evidence"
+
+
+@pytest.mark.parametrize(
+    "reason_code",
+    [True, False, 0, 1, 12.5, "", "   "],
+)
+def test_draft_pass_reason_ignores_malformed_dimension_reason_codes(reason_code):
+    draft = draft_pass_reason(
+        {"dimension_scores": [{"score": 35, "reason_code": reason_code}]}
+    )
+
+    assert draft["reason_code"] == "insufficient_public_evidence"
+
+
 def test_draft_pass_reason_falls_back_to_public_evidence_gap():
     draft = draft_pass_reason({"risks": [], "dimension_scores": []})
 
