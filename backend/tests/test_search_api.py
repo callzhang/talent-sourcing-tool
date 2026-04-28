@@ -1,4 +1,6 @@
 from collections.abc import Generator
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -6,9 +8,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, select
 
-from app.db.models import Candidate, SearchRun
+from app.db.models import Candidate, SearchResult, SearchRun
 from app.db.session import create_db_engine, get_session
 from app.main import app
+from app.services.sourcing import CandidateSourceResult
 
 
 @pytest.fixture
@@ -115,3 +118,135 @@ def test_search_marks_run_failed_when_connector_raises(
         search_run = session.exec(select(SearchRun)).one()
     assert search_run.status == "failed"
     assert search_run.run_metadata["error_message"] == "connector unavailable"
+
+
+def test_search_deduplicates_connector_results_by_canonical_linkedin_url(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    class DuplicateConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            return [
+                CandidateSourceResult(
+                    linkedin_url="https://www.linkedin.com/in/example-profile/",
+                    name="Example Person",
+                    headline="Founding PMM",
+                    location="Remote",
+                    current_company="ExampleCo",
+                    current_title="Founding PMM",
+                    raw={"rank": 1},
+                ),
+                CandidateSourceResult(
+                    linkedin_url="https://www.linkedin.com/in/example-profile?trk=people",
+                    name="Example Person Duplicate",
+                    headline="Duplicate result",
+                    location="Remote",
+                    current_company="ExampleCo",
+                    current_title="Founding PMM",
+                    raw={"rank": 2},
+                ),
+            ]
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: DuplicateConnector())
+
+    response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "founding PMM", "params": {"limit": 2}},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["candidates"]) == 1
+    assert data["candidates"][0]["linkedin_url"] == (
+        "https://www.linkedin.com/in/example-profile"
+    )
+
+    with Session(engine) as session:
+        search_results = session.exec(select(SearchResult)).all()
+    assert len(search_results) == 1
+
+
+def test_search_stores_json_unsafe_raw_payload_safely(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+    observed_at = datetime(2026, 4, 28, 12, 30, tzinfo=UTC)
+    founded_on = date(2024, 1, 2)
+
+    class UnsafeRawConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            return [
+                CandidateSourceResult(
+                    linkedin_url="https://www.linkedin.com/in/json-unsafe",
+                    name="JSON Unsafe",
+                    headline="Has unsafe raw payload",
+                    location="Remote",
+                    current_company="BytesCo",
+                    current_title="PMM",
+                    raw={
+                        "observed_at": observed_at,
+                        "founded_on": founded_on,
+                        "score": Decimal("9.75"),
+                        "avatar": b"binary-avatar",
+                    },
+                )
+            ]
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: UnsafeRawConnector())
+
+    response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "json unsafe"},
+    )
+
+    assert response.status_code == 200
+    with Session(engine) as session:
+        search_result = session.exec(select(SearchResult)).one()
+        candidate = session.exec(select(Candidate)).one()
+
+    raw = search_result.raw_data["raw"]
+    assert raw["observed_at"] == observed_at.isoformat()
+    assert raw["founded_on"] == founded_on.isoformat()
+    assert raw["score"] == "9.75"
+    assert raw["avatar"] == "binary-avatar"
+    assert candidate.profile_data["raw"] == raw
+
+
+def test_search_marks_run_failed_when_persistence_fails(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    from app.api import search
+
+    def fail_upsert(session, result):  # noqa: ANN001, ANN202
+        raise RuntimeError("candidate persistence failed")
+
+    monkeypatch.setattr(search, "upsert_candidate", fail_upsert)
+
+    response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "founding PMM"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "candidate persistence failed"
+    with Session(engine) as session:
+        search_run = session.exec(select(SearchRun)).one()
+    assert search_run.status == "failed"
+    assert search_run.run_metadata["error_message"] == "candidate persistence failed"
+
+
+def test_json_safe_value_converts_unknown_objects_to_string():
+    from app.api.search import json_safe_value
+
+    class UnknownValue:
+        def __str__(self) -> str:
+            return "unknown-value"
+
+    assert json_safe_value({"value": UnknownValue()}) == {"value": "unknown-value"}
