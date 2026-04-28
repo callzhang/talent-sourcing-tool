@@ -108,7 +108,9 @@ export function App() {
       {page === "candidates" ? (
         <CandidatesPage
           selectedJobId={selectedJobId}
+          jobs={jobs}
           candidates={candidates}
+          onSelectJob={setSelectedJobId}
           onLoadedCandidates={setCandidates}
           onReviewCandidate={handleReviewCandidate}
         />

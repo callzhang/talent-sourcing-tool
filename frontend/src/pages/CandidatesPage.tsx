@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { Candidate } from "../types";
+import type { Candidate, Job } from "../types";
 
 type CandidatesPageProps = {
   selectedJobId: string | null;
+  jobs: Job[];
   candidates: Candidate[];
+  onSelectJob: (jobId: string) => void;
   onLoadedCandidates: (candidates: Candidate[]) => void;
   onReviewCandidate: (candidate: Candidate) => void;
 };
 
 export function CandidatesPage({
   selectedJobId,
+  jobs,
   candidates,
+  onSelectJob,
   onLoadedCandidates,
   onReviewCandidate
 }: CandidatesPageProps) {
@@ -51,6 +55,21 @@ export function CandidatesPage({
     <section className="card" aria-labelledby="candidates-heading">
       <p className="section-kicker">Candidate review queue</p>
       <h2 id="candidates-heading">Candidates</h2>
+      {jobs.length > 0 ? (
+        <label className="compact-field">
+          Review queue JD
+          <select
+            value={selectedJobId ?? ""}
+            onChange={(event) => onSelectJob(event.target.value)}
+          >
+            {jobs.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <p className="muted">{status}</p>
       <div className="candidate-grid">
         {candidates.map((candidate) => (

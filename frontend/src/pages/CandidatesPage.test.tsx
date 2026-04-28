@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 
 import { CandidatesPage } from "./CandidatesPage";
-import type { Candidate } from "../types";
+import type { Candidate, Job } from "../types";
 
 afterEach(() => {
   cleanup();
@@ -14,7 +14,9 @@ it("asks for a JD before loading candidates", () => {
   render(
     <CandidatesPage
       selectedJobId={null}
+      jobs={[]}
       candidates={[]}
+      onSelectJob={() => undefined}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
     />
@@ -31,7 +33,9 @@ it("loads searched candidates and sends selected candidate to review", async () 
   const { rerender } = render(
     <CandidatesPage
       selectedJobId="job_1"
+      jobs={[job]}
       candidates={[]}
+      onSelectJob={() => undefined}
       onLoadedCandidates={onLoadedCandidates}
       onReviewCandidate={onReviewCandidate}
     />
@@ -42,7 +46,9 @@ it("loads searched candidates and sends selected candidate to review", async () 
   rerender(
     <CandidatesPage
       selectedJobId="job_1"
+      jobs={[job]}
       candidates={[candidate]}
+      onSelectJob={() => undefined}
       onLoadedCandidates={onLoadedCandidates}
       onReviewCandidate={onReviewCandidate}
     />
@@ -65,7 +71,9 @@ it("renders empty and error states for candidate loading", async () => {
   const { rerender } = render(
     <CandidatesPage
       selectedJobId="job_1"
+      jobs={[job]}
       candidates={[]}
+      onSelectJob={() => undefined}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
     />
@@ -76,7 +84,9 @@ it("renders empty and error states for candidate loading", async () => {
   rerender(
     <CandidatesPage
       selectedJobId="job_2"
+      jobs={[job, pmmJob]}
       candidates={[]}
+      onSelectJob={() => undefined}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
     />
@@ -99,7 +109,9 @@ it("ignores candidate loads that resolve after unmount", async () => {
   const { unmount } = render(
     <CandidatesPage
       selectedJobId="job_1"
+      jobs={[job]}
       candidates={[]}
+      onSelectJob={() => undefined}
       onLoadedCandidates={onLoadedCandidates}
       onReviewCandidate={() => undefined}
     />
@@ -109,6 +121,45 @@ it("ignores candidate loads that resolve after unmount", async () => {
   resolveCandidates(await jsonResponse([candidate]));
   expect(onLoadedCandidates).not.toHaveBeenCalled();
 });
+
+it("lets the user switch the JD used by the candidate queue", async () => {
+  const onSelectJob = vi.fn();
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => jsonResponse([]));
+
+  render(
+    <CandidatesPage
+      selectedJobId="job_1"
+      jobs={[job, pmmJob]}
+      candidates={[]}
+      onSelectJob={onSelectJob}
+      onLoadedCandidates={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  fireEvent.change(screen.getByLabelText("Review queue JD"), {
+    target: { value: "job_pmm" }
+  });
+
+  expect(onSelectJob).toHaveBeenCalledWith("job_pmm");
+});
+
+const job: Job = {
+  id: "job_1",
+  title: "Business Intern",
+  description: "Support sourcing",
+  target_profile_text: "",
+  red_flags_text: "",
+  search_notes: "",
+  created_at: "2026-04-28T12:00:00Z",
+  updated_at: "2026-04-28T12:00:00Z"
+};
+
+const pmmJob: Job = {
+  ...job,
+  id: "job_pmm",
+  title: "US Frontier Team - Founding PMM / PMF Discovery Lead"
+};
 
 const candidate: Candidate = {
   id: "candidate_1",
