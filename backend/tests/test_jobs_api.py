@@ -205,6 +205,35 @@ def test_list_jobs_collapses_legacy_duplicate_titles(client: TestClient, engine:
     ]
 
 
+def test_list_jobs_collapses_us_frontier_team_title_prefix(client: TestClient, engine: Engine):
+    with Session(engine) as session:
+        older = Job(title="AI Product Engineer", description="Older duplicate")
+        newer = Job(title="US Frontier Team - AI Product Engineer", description="Newest duplicate")
+        session.add(older)
+        session.add(newer)
+        session.commit()
+
+    response = client.get("/api/jobs")
+
+    assert response.status_code == 200
+    assert [job["title"] for job in response.json()] == ["US Frontier Team - AI Product Engineer"]
+
+
+def test_create_job_reuses_existing_job_with_us_frontier_team_prefix(client: TestClient):
+    first_response = client.post(
+        "/api/jobs",
+        json={"title": "US Frontier Team - AI Product Engineer", "description": "Build demos."},
+    )
+    second_response = client.post(
+        "/api/jobs",
+        json={"title": "AI Product Engineer", "description": "Duplicate without prefix."},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json()["job"]["id"] == first_response.json()["job"]["id"]
+
+
 def test_get_job_404s_when_rubric_missing(client: TestClient, engine: Engine):
     with Session(engine) as session:
         job = Job(title="No Rubric", description="Missing rubric")

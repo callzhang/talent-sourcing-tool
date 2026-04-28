@@ -14,7 +14,11 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 def job_title_key(title: str) -> str:
-    return " ".join(title.casefold().split())
+    normalized_title = " ".join(title.casefold().split())
+    prefix = "us frontier team - "
+    if normalized_title.startswith(prefix):
+        return normalized_title.removeprefix(prefix)
+    return normalized_title
 
 
 def read_rubric(rubric: Rubric) -> RubricRead:
