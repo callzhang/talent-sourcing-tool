@@ -96,52 +96,11 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
   }
 
   return (
-    <section className="workspace-grid" aria-labelledby="jobs-heading">
-      <div className="card card-form">
-        <p className="section-kicker">JD intake</p>
-        <h2 id="jobs-heading">JD Management</h2>
-        <form className="stack" onSubmit={handleSubmit}>
-          <label>
-            JD title
-            <input value={title} onChange={(event) => setTitle(event.target.value)} required />
-          </label>
-          <label>
-            JD description
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              required
-              rows={5}
-            />
-          </label>
-          <label>
-            Target profile
-            <textarea value={targetProfile} onChange={(event) => setTargetProfile(event.target.value)} />
-          </label>
-          <label>
-            Red flags
-            <textarea value={redFlags} onChange={(event) => setRedFlags(event.target.value)} />
-          </label>
-          <label>
-            Search notes
-            <textarea value={searchNotes} onChange={(event) => setSearchNotes(event.target.value)} />
-          </label>
-          <button className="primary-action" type="submit" disabled={isSaving}>
-            Create JD and rubric
-          </button>
-        </form>
+    <div className="jobs-grid">
+      <section className="card job-list-pane" aria-label="Job listings">
+        <p className="section-kicker">Jobs</p>
+        <h2 id="jobs-heading">Job listings</h2>
         <p className="muted">{status}</p>
-      </div>
-
-      <div className="card">
-        <p className="section-kicker">Active rubric</p>
-        <div className="split-heading">
-          <h3>{activeJob?.job.title ?? "No JD selected"}</h3>
-          <span>{activeJob ? `v${activeJob.rubric.version}` : "Draft"}</span>
-        </div>
-        <JobDetail job={activeJob} />
-        <RubricPreview job={activeJob} />
-        <p className="section-kicker job-list-heading">All JDs</p>
         <div className="job-list">
           {jobs.map((job) => (
             <button
@@ -156,8 +115,58 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
             </button>
           ))}
         </div>
-      </div>
-    </section>
+      </section>
+
+      <section className="card job-detail-pane" aria-label="Job detail">
+        <p className="section-kicker">Active rubric</p>
+        <div className="split-heading">
+          <h3>{activeJob?.job.title ?? "No JD selected"}</h3>
+          <span>{activeJob ? `v${activeJob.rubric.version}` : "Draft"}</span>
+        </div>
+        <JobDetail job={activeJob} />
+        <RubricPreview job={activeJob} />
+        <section className="create-job-panel" aria-labelledby="create-job-heading">
+          <p className="section-kicker">JD intake</p>
+          <h2 id="create-job-heading">JD Management</h2>
+          <form className="stack" onSubmit={handleSubmit}>
+            <label>
+              JD title
+              <input value={title} onChange={(event) => setTitle(event.target.value)} required />
+            </label>
+            <label>
+              JD description
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                required
+                rows={5}
+              />
+            </label>
+            <label>
+              Target profile
+              <textarea
+                value={targetProfile}
+                onChange={(event) => setTargetProfile(event.target.value)}
+              />
+            </label>
+            <label>
+              Red flags
+              <textarea value={redFlags} onChange={(event) => setRedFlags(event.target.value)} />
+            </label>
+            <label>
+              Search notes
+              <textarea
+                value={searchNotes}
+                onChange={(event) => setSearchNotes(event.target.value)}
+              />
+            </label>
+            <button className="primary-action" type="submit" disabled={isSaving}>
+              Create JD and rubric
+            </button>
+          </form>
+        </section>
+      </section>
+    </div>
   );
 }
 

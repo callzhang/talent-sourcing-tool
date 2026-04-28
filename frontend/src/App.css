@@ -301,6 +301,33 @@ h3 {
   margin-top: 24px;
 }
 
+.jobs-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.45fr) minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 24px;
+  align-items: start;
+}
+
+.job-list-pane {
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+}
+
+.job-detail-pane,
+.create-job-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.create-job-panel {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
 .detail-grid {
   grid-template-columns: minmax(260px, 0.7fr) minmax(320px, 1fr);
 }
@@ -368,10 +395,6 @@ h3 {
 .compact-list {
   display: grid;
   gap: 8px;
-}
-
-.job-list-heading {
-  margin-top: 22px;
 }
 
 .list-row,
@@ -503,9 +526,15 @@ h3 {
   }
 
   .app-nav,
+  .jobs-grid,
   .workspace-grid,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .job-list-pane {
+    position: static;
+    max-height: none;
   }
 
   .app-nav {

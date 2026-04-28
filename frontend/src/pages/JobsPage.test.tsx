@@ -73,6 +73,34 @@ it("shows the selected JD details and rubric evidence fields", async () => {
   expect(screen.getByText("Only internal tooling.")).toBeInTheDocument();
 });
 
+it("renders job listings in the left pane and selected job detail in the right pane", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/jobs")) {
+      return jsonResponse([jobWithDetails]);
+    }
+    if (url.endsWith("/api/jobs/job_1")) {
+      return jsonResponse(jobWithEvidenceRubric);
+    }
+    return jsonResponse(null);
+  });
+
+  render(
+    <JobsPage
+      selectedJobId="job_1"
+      onSelectJob={() => undefined}
+      onCreatedJob={() => undefined}
+    />
+  );
+
+  const listingsPane = await screen.findByRole("region", { name: "Job listings" });
+  const detailPane = await screen.findByRole("region", { name: "Job detail" });
+
+  expect(listingsPane).toContainElement(screen.getByRole("button", { name: /AI Product Engineer/ }));
+  expect(detailPane).toContainElement(screen.getByText("Build customer demos."));
+  expect(listingsPane.compareDocumentPosition(detailPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 it("creates a job, forwards it to the app shell, and clears the form", async () => {
   const onCreatedJob = vi.fn();
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
