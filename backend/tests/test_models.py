@@ -176,7 +176,7 @@ def test_migrate_existing_sqlite_schema_adds_job_profile_columns(tmp_path: Path)
             row[1] for row in connection.execute(text("PRAGMA table_info(reviewjob)")).all()
         }
 
-    assert {"target_profile_text", "red_flags_text", "search_notes", "search_channels"}.issubset(
+    assert {"region", "target_profile_text", "red_flags_text", "search_notes", "search_channels"}.issubset(
         job_columns
     )
     assert {"input_path", "output_path"}.issubset(review_job_columns)
@@ -211,6 +211,7 @@ def test_migrate_existing_sqlite_schema_normalizes_job_titles(tmp_path: Path):
                     id VARCHAR NOT NULL PRIMARY KEY,
                     title VARCHAR NOT NULL,
                     description VARCHAR NOT NULL,
+                    region TEXT NOT NULL DEFAULT '',
                     status VARCHAR NOT NULL,
                     created_at DATETIME NOT NULL,
                     updated_at DATETIME NOT NULL
@@ -239,9 +240,9 @@ def test_migrate_existing_sqlite_schema_normalizes_job_titles(tmp_path: Path):
             text(
                 """
                 INSERT INTO job
-                (id, title, description, status, created_at, updated_at)
+                (id, title, description, region, status, created_at, updated_at)
                 VALUES
-                ('job_1', 'US Frontier Team - Founding PMM / PMF Discovery Lead', 'Own PMF discovery.', 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ('job_1', 'US Frontier Team - Founding PMM / PMF Discovery Lead', 'Own PMF discovery.', 'San Francisco, CA', 'draft', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """
             )
         )
@@ -249,9 +250,9 @@ def test_migrate_existing_sqlite_schema_normalizes_job_titles(tmp_path: Path):
     migrate_existing_sqlite_schema(engine)
 
     with engine.begin() as connection:
-        row = connection.execute(text("SELECT title FROM job WHERE id = 'job_1'")).scalar_one()
+        row = connection.execute(text("SELECT title, region FROM job WHERE id = 'job_1'")).one()
 
-    assert row == "Founding PMM / PMF Discovery Lead"
+    assert row == ("Founding PMM / PMF Discovery Lead", "San Francisco, CA")
 
 
 def test_migrate_existing_sqlite_schema_backfills_search_run_channels(tmp_path: Path):

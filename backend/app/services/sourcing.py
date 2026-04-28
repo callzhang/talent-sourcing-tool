@@ -36,8 +36,9 @@ class MockBrightDataConnector:
         options = params or {}
         limit = int(options.get("limit", 10))
         channels = normalize_search_channels(options.get("channels", []))
+        region = normalize_region(options.get("region"))
         if _matches_ai_product_engineer(query):
-            return list(islice(_ai_product_engineer_fixtures(query, channels), limit))
+            return list(islice(filter_results_by_region(_ai_product_engineer_fixtures(query, channels), region), limit))
 
         fixtures = [
             CandidateSourceResult(
@@ -98,7 +99,7 @@ class MockBrightDataConnector:
                 },
             ),
         ]
-        return fixtures[:limit]
+        return list(islice(filter_results_by_region(fixtures, region), limit))
 
 
 def get_sourcing_connector() -> SourcingConnector:
@@ -182,6 +183,24 @@ def candidate_sources(name: str, linkedin_url: str, channels: list[str]) -> list
                 }
             )
     return sources
+
+
+def normalize_region(value: Any) -> str:
+    return str(value or "").strip().casefold()
+
+
+def filter_results_by_region(
+    results: list[CandidateSourceResult], region: str
+) -> list[CandidateSourceResult]:
+    if not region:
+        return results
+    return [result for result in results if location_matches_region(result.location, region)]
+
+
+def location_matches_region(location: str | None, region: str) -> bool:
+    if not location:
+        return False
+    return region in location.casefold()
 
 
 def _matches_ai_product_engineer(query: str) -> bool:

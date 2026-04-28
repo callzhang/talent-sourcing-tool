@@ -54,6 +54,7 @@ def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -
         job = Job(
             title=normalized_title,
             description=job_create.description,
+            region=job_create.region.strip(),
             target_profile_text=job_create.target_profile_text,
             red_flags_text=job_create.red_flags_text,
             search_notes=job_create.search_notes,

@@ -65,6 +65,7 @@ it("shows the selected JD details and rubric evidence fields", async () => {
   );
 
   expect(await screen.findByText("Build customer demos.")).toBeInTheDocument();
+  expect(screen.getByText("San Francisco, CA")).toBeInTheDocument();
   expect(screen.getByText("AI-native builder")).toBeInTheDocument();
   expect(screen.getByText("No shipping evidence")).toBeInTheDocument();
   expect(screen.getByText("Search for prototype builders")).toBeInTheDocument();
@@ -130,6 +131,9 @@ it("creates a job, forwards it to the app shell, and clears the form", async () 
   });
   fireEvent.change(screen.getByLabelText("JD description"), {
     target: { value: "Build customer demos." }
+  });
+  fireEvent.change(screen.getByLabelText("Region"), {
+    target: { value: "San Francisco, CA" }
   });
   fireEvent.change(screen.getByLabelText("Target profile"), {
     target: { value: "AI-native builder" }
@@ -225,6 +229,7 @@ const job = {
   id: "job_1",
   title: "AI Product Engineer",
   description: "Build customer demos.",
+  region: "",
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "",
@@ -235,6 +240,7 @@ const job = {
 
 const jobWithDetails = {
   ...job,
+  region: "San Francisco, CA",
   target_profile_text: "AI-native builder",
   red_flags_text: "No shipping evidence",
   search_notes: "Search for prototype builders"

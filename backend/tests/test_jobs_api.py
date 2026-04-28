@@ -37,6 +37,7 @@ def test_create_job_generates_rubric(client: TestClient):
     payload = {
         "title": "AI Product Engineer",
         "description": "Build AI prototypes with strong vibe coding.",
+        "region": "San Francisco, CA",
         "target_profile_text": "Strong builder, AI-native, product sense.",
         "red_flags_text": "Only traditional backend, no product sense.",
         "search_notes": "Search early AI app builders.",
@@ -52,6 +53,7 @@ def test_create_job_generates_rubric(client: TestClient):
     data = response.json()
     assert data["job"]["title"] == payload["title"]
     assert "status" not in data["job"]
+    assert data["job"]["region"] == payload["region"]
     assert data["job"]["target_profile_text"] == payload["target_profile_text"]
     assert data["job"]["red_flags_text"] == payload["red_flags_text"]
     assert data["job"]["search_notes"] == payload["search_notes"]
@@ -66,6 +68,7 @@ def test_create_job_persists_all_job_fields(client: TestClient, engine: Engine):
         json={
             "title": "PMM Lead",
             "description": "Own product marketing for AI launches.",
+            "region": "San Francisco, CA",
             "target_profile_text": "Product marketer with AI launch judgment.",
             "red_flags_text": "Only brand campaigns.",
             "search_notes": "Find product-led PMMs.",
@@ -78,6 +81,7 @@ def test_create_job_persists_all_job_fields(client: TestClient, engine: Engine):
     with Session(engine) as session:
         job = session.exec(select(Job)).one()
 
+    assert job.region == "San Francisco, CA"
     assert job.target_profile_text == "Product marketer with AI launch judgment."
     assert job.red_flags_text == "Only brand campaigns."
     assert job.search_notes == "Find product-led PMMs."
@@ -110,11 +114,13 @@ def test_create_job_strips_us_frontier_team_prefix(client: TestClient, engine: E
         json={
             "title": "US Frontier Team - Founding PMM / PMF Discovery Lead",
             "description": "Own PMF discovery.",
+            "region": "San Francisco, CA",
         },
     )
 
     assert response.status_code == 200
     assert response.json()["job"]["title"] == "Founding PMM / PMF Discovery Lead"
+    assert response.json()["job"]["region"] == "San Francisco, CA"
 
     with Session(engine) as session:
         job = session.exec(select(Job)).one()

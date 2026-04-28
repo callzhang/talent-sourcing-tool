@@ -38,7 +38,7 @@ def client(engine: Engine) -> Generator[TestClient, None, None]:
 def create_job(client: TestClient) -> str:
     response = client.post(
         "/api/jobs",
-        json={"title": "Founding PMM", "description": "Find PMF wedge"},
+        json={"title": "Founding PMM", "description": "Find PMF wedge", "region": "San Francisco, CA"},
     )
     assert response.status_code == 200
     return str(response.json()["job"]["id"])
@@ -59,7 +59,7 @@ def test_search_upserts_candidates_by_linkedin_url(client: TestClient, engine: E
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "completed"
-    assert len(data["candidates"]) == 2
+    assert len(data["candidates"]) == 1
     assert data["candidates"][0]["linkedin_url"].startswith("https://www.linkedin.com/in/")
 
     repeat_response = client.post(
@@ -74,7 +74,7 @@ def test_search_upserts_candidates_by_linkedin_url(client: TestClient, engine: E
     assert repeat_response.status_code == 200
     with Session(engine) as session:
         candidates = session.exec(select(Candidate)).all()
-    assert len(candidates) == 2
+    assert len(candidates) == 1
 
 
 def test_search_returns_ai_product_engineer_fixture_set(client: TestClient):
@@ -91,11 +91,12 @@ def test_search_returns_ai_product_engineer_fixture_set(client: TestClient):
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["candidates"]) == 10
+    assert len(data["candidates"]) == 1
     assert data["candidates"][0]["name"] == "Alex Rivera"
+    assert data["candidates"][0]["location"] == "San Francisco, CA"
     assert data["candidates"][0]["profile_data"]["raw"]["target_role"] == "AI Product Engineer"
     assert data["candidates"][0]["profile_data"]["raw"]["signals"]
-    assert data["candidates"][4]["profile_data"]["raw"]["risks"]
+    assert data["candidates"][0]["profile_data"]["raw"]["risks"] == []
 
 
 def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: TestClient):
@@ -121,8 +122,8 @@ def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: Test
     assert response.status_code == 200
     data = response.json()
     assert [run["query"] for run in data] == ["AI product marketer", "founding PMM AI startup"]
-    assert data[0]["candidate_count"] == 2
-    assert data[0]["params"] == {"limit": 2}
+    assert data[0]["candidate_count"] == 1
+    assert data[0]["params"] == {"limit": 2, "region": "San Francisco, CA"}
     assert data[1]["channels"] == ["linkedin", "exa", "brightdata_discover"]
 
 
@@ -142,6 +143,7 @@ def test_get_search_run_returns_candidates(client: TestClient):
     assert data["id"] == search_run_id
     assert data["query"] == "founding PMM AI startup"
     assert data["channels"] == ["linkedin", "exa", "brightdata_discover"]
+    assert data["params"]["region"] == "San Francisco, CA"
     assert len(data["candidates"]) == 1
 
 
@@ -151,6 +153,7 @@ def test_search_uses_job_channels_when_request_channels_are_empty(client: TestCl
         json={
             "title": "Founding PMM",
             "description": "Find PMF wedge",
+            "region": "San Francisco, CA",
             "search_channels": ["linkedin", "exa", "brightdata_discover"],
         },
     )
@@ -167,6 +170,7 @@ def test_search_uses_job_channels_when_request_channels_are_empty(client: TestCl
     detail_response = client.get(f"/api/search/{search_run_id}")
     assert detail_response.status_code == 200
     assert detail_response.json()["channels"] == ["linkedin", "exa", "brightdata_discover"]
+    assert detail_response.json()["params"]["region"] == "San Francisco, CA"
 
 
 def test_get_search_run_404s_for_missing_run(client: TestClient):

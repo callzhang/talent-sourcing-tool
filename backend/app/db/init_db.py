@@ -20,6 +20,7 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
 
     required_columns_by_table = {
         "job": {
+            "region": "TEXT NOT NULL DEFAULT ''",
             "target_profile_text": "TEXT NOT NULL DEFAULT ''",
             "red_flags_text": "TEXT NOT NULL DEFAULT ''",
             "search_notes": "TEXT NOT NULL DEFAULT ''",
@@ -53,9 +54,9 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
                         )
                     )
         existing_jobs = connection.execute(
-            text("SELECT id, title, description, search_channels FROM job")
+            text("SELECT id, title, description, region, search_channels FROM job")
         ).all()
-        for job_id, title, description, search_channels in existing_jobs:
+        for job_id, title, description, region, search_channels in existing_jobs:
             normalized_title = normalize_job_title(title)
             parsed_channels = (
                 json.loads(search_channels)
@@ -68,10 +69,14 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
             if not normalized_channels:
                 normalized_channels = default_job_search_channels(normalized_title, description)
             connection.execute(
-                text("UPDATE job SET title = :title, search_channels = :search_channels WHERE id = :job_id"),
+                text(
+                    "UPDATE job SET title = :title, region = :region, "
+                    "search_channels = :search_channels WHERE id = :job_id"
+                ),
                 {
                     "job_id": job_id,
                     "title": normalized_title,
+                    "region": str(region or "").strip(),
                     "search_channels": json.dumps(normalized_channels),
                 },
             )

@@ -202,6 +202,7 @@ const job: Job = {
   id: "job_1",
   title: "Business Intern",
   description: "Support sourcing",
+  region: "",
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "",
@@ -213,7 +214,8 @@ const job: Job = {
 const pmmJob: Job = {
   ...job,
   id: "job_pmm",
-  title: "US Frontier Team - Founding PMM / PMF Discovery Lead"
+  title: "Founding PMM / PMF Discovery Lead",
+  region: "San Francisco, CA"
 };
 
 const candidate: Candidate = {

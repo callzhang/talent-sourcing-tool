@@ -25,7 +25,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
           provider: "bright_data",
           channels: ["linkedin", "github", "exa", "brightdata_discover"],
           status: "completed",
-          params: { limit: 3 },
+          params: { limit: 3, region: "San Francisco, CA" },
           candidate_count: 3,
           created_at: "2026-04-28T12:00:00Z",
           completed_at: "2026-04-28T12:01:00Z"
@@ -40,7 +40,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
         provider: "bright_data",
         channels: ["linkedin", "github", "exa", "brightdata_discover"],
         status: "completed",
-        params: { limit: 3 },
+        params: { limit: 3, region: "San Francisco, CA" },
         candidate_count: 1,
         created_at: "2026-04-28T12:00:00Z",
         completed_at: "2026-04-28T12:01:00Z",
@@ -70,6 +70,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   expect(await screen.findByText("existing ai pmm search")).toBeInTheDocument();
   expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
   expect(screen.getAllByText("LinkedIn + GitHub + Exa + Bright Data Discover")).toHaveLength(2);
+  expect(screen.getAllByText("San Francisco, CA")).toHaveLength(2);
   expect(screen.getByText("Searching Channels")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("Candidate limit"), {
@@ -90,7 +91,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
         job_id: "job_1",
         query: "Search configured from the JD",
         channels: ["linkedin", "github", "exa", "brightdata_discover"],
-        params: { limit: 2 }
+        params: { limit: 2, region: "San Francisco, CA" }
       })
     })
   );
@@ -207,6 +208,7 @@ const job: Job = {
   id: "job_1",
   title: "AI Product Engineer",
   description: "Build prototypes",
+  region: "San Francisco, CA",
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "Search configured from the JD",

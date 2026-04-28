@@ -89,7 +89,10 @@ export function SearchPage({
         job_id: selectedJobId,
         query,
         channels,
-        params: { limit: Number(limit) || 10 }
+        params: {
+          limit: Number(limit) || 10,
+          region: selectedJob?.region.trim() ?? ""
+        }
       });
       onCandidatesFound(result.candidates);
       setRuns((current) => [
@@ -100,7 +103,10 @@ export function SearchPage({
           provider: "bright_data",
           channels,
           status: result.status,
-          params: { limit: Number(limit) || 10 },
+          params: {
+            limit: Number(limit) || 10,
+            region: selectedJob?.region.trim() ?? ""
+          },
           candidate_count: result.candidates.length,
           created_at: new Date().toISOString(),
           completed_at: new Date().toISOString()
@@ -116,7 +122,10 @@ export function SearchPage({
           provider: "bright_data",
           channels,
           status: result.status,
-          params: { limit: Number(limit) || 10 },
+          params: {
+            limit: Number(limit) || 10,
+            region: selectedJob?.region.trim() ?? ""
+          },
           candidate_count: result.candidates.length,
           created_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
@@ -177,6 +186,10 @@ export function SearchPage({
             <span className="detail-label">Searching Channels</span>
             <strong>{formatChannels(channels)}</strong>
           </div>
+          <div className="search-channel-summary">
+            <span className="detail-label">Region</span>
+            <strong>{selectedJob?.region.trim() || "No region specified"}</strong>
+          </div>
           <button className="primary-action" type="submit" disabled={isSearching}>
             Create search run
           </button>
@@ -194,6 +207,7 @@ export function SearchPage({
               <span>
                 {run.status} · {run.candidate_count} candidates
               </span>
+              <span>{formatRunRegion(run.params)}</span>
               <span>{run.channels.map(channelLabel).join(" + ")}</span>
               <RunCandidates
                 candidates={runDetails[run.id]?.candidates ?? []}
@@ -252,6 +266,11 @@ function formatChannels(channels: string[]): string {
     return "No channels selected";
   }
   return labels.join(" + ");
+}
+
+function formatRunRegion(params: Record<string, unknown>): string {
+  const region = typeof params.region === "string" ? params.region.trim() : "";
+  return region || "No region specified";
 }
 
 function searchQueryForJob(job: Job | null): string {

@@ -83,6 +83,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export type CreateJobPayload = {
   title: string;
   description: string;
+  region?: string;
   target_profile_text?: string;
   red_flags_text?: string;
   search_notes?: string;

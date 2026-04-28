@@ -23,6 +23,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
   const [activeJob, setActiveJob] = useState<JobWithRubric | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [region, setRegion] = useState("");
   const [targetProfile, setTargetProfile] = useState("");
   const [redFlags, setRedFlags] = useState("");
   const [searchNotes, setSearchNotes] = useState("");
@@ -90,6 +91,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
       const created = await api.createJob({
         title,
         description,
+        region,
         target_profile_text: targetProfile,
         red_flags_text: redFlags,
         search_notes: searchNotes,
@@ -100,6 +102,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
       onCreatedJob(created);
       setTitle("");
       setDescription("");
+      setRegion("");
       setTargetProfile("");
       setRedFlags("");
       setSearchNotes("");
@@ -159,6 +162,10 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
               />
             </label>
             <label>
+              Region
+              <input value={region} onChange={(event) => setRegion(event.target.value)} />
+            </label>
+            <label>
               Target profile
               <textarea
                 value={targetProfile}
@@ -195,6 +202,7 @@ function JobDetail({ job }: { job: JobWithRubric | null }) {
   return (
     <div className="job-detail">
       <DetailBlock label="JD description" value={job.job.description} />
+      <DetailBlock label="Region" value={job.job.region} />
       <DetailBlock label="Target profile" value={job.job.target_profile_text} />
       <DetailBlock label="Red flags" value={job.job.red_flags_text} />
       <DetailBlock label="Search notes" value={job.job.search_notes} />

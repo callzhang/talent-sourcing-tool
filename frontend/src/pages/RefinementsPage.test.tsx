@@ -145,6 +145,7 @@ const job: Job = {
   id: "job_1",
   title: "AI Product Engineer",
   description: "Build prototypes",
+  region: "",
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "",

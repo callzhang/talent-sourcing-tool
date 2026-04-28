@@ -153,6 +153,7 @@ const jobWithRubric = {
     id: "job_1",
     title: "Founding PMM",
     description: "Own positioning for AI launch.",
+    region: "San Francisco, CA",
     target_profile_text: "",
     red_flags_text: "",
     search_notes: "",

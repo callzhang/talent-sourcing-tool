@@ -231,7 +231,10 @@ def create_search(
         provider=search_create.provider,
         status="running",
         run_metadata={
-            "params": search_create.params,
+            "params": {
+                **search_create.params,
+                "region": job.region.strip(),
+            },
             "channels": normalize_search_channels(search_create.channels)
             or job.search_channels
             or default_job_search_channels(job.title, job.description),
@@ -246,7 +249,7 @@ def create_search(
             get_sourcing_connector().search_people(
                 search_create.query,
                 {
-                    **search_create.params,
+                    **search_run_params(search_run),
                     "channels": search_run_channels(search_run),
                 },
             )

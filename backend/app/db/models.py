@@ -67,6 +67,7 @@ class Job(SQLModel, table=True):
     id: str = Field(default_factory=job_id, primary_key=True)
     title: str
     description: str
+    region: str = ""
     target_profile_text: str = ""
     red_flags_text: str = ""
     search_notes: str = ""

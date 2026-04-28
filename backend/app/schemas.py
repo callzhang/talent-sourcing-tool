@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class JobCreate(BaseModel):
     title: str
     description: str
+    region: str = ""
     target_profile_text: str = ""
     red_flags_text: str = ""
     search_notes: str = ""
@@ -21,6 +22,7 @@ class JobRead(BaseModel):
     id: str
     title: str
     description: str
+    region: str
     target_profile_text: str
     red_flags_text: str
     search_notes: str
