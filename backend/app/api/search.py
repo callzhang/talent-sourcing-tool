@@ -122,11 +122,11 @@ def upsert_candidate(session: Session, result: CandidateSourceResult) -> Candida
                 "raw": result.raw,
             },
         )
-        session.add(candidate)
         try:
-            session.flush()
+            with session.begin_nested():
+                session.add(candidate)
+                session.flush()
         except IntegrityError:
-            session.rollback()
             candidate = session.exec(
                 select(Candidate).where(Candidate.linkedin_url == result.linkedin_url)
             ).one()

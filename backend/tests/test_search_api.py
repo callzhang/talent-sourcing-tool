@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, select
 
-from app.db.models import Candidate, SearchResult, SearchRun
+from app.db.models import Candidate, Job, SearchResult, SearchRun
 from app.db.session import create_db_engine, get_session
 from app.main import app
 from app.services.sourcing import CandidateSourceResult
@@ -250,3 +250,92 @@ def test_json_safe_value_converts_unknown_objects_to_string():
             return "unknown-value"
 
     assert json_safe_value({"value": UnknownValue()}) == {"value": "unknown-value"}
+
+
+def test_candidate_race_recovery_preserves_prior_search_results(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    from app.api import search
+
+    race_url = "https://www.linkedin.com/in/race-candidate"
+
+    with Session(engine) as session:
+        job = Job(title="Founding PMM", description="Find PMF wedge")
+        existing_candidate = Candidate(linkedin_url=race_url, name="Existing Candidate")
+        session.add(job)
+        session.add(existing_candidate)
+        session.commit()
+        session.refresh(job)
+        session.refresh(existing_candidate)
+
+        search_run = SearchRun(
+            job_id=job.id,
+            query="founding PMM",
+            status="running",
+        )
+        session.add(search_run)
+        session.commit()
+        session.refresh(search_run)
+        search_run_id = search_run.id
+
+        prior_candidate = Candidate(
+            linkedin_url="https://www.linkedin.com/in/prior-candidate",
+            name="Prior Candidate",
+        )
+        session.add(prior_candidate)
+        session.flush()
+        session.add(
+            SearchResult(
+                search_run_id=search_run_id,
+                candidate_id=prior_candidate.id,
+                linkedin_url=prior_candidate.linkedin_url,
+                rank=1,
+                raw_data={"raw": {"rank": 1}},
+            )
+        )
+
+        real_exec = session.exec
+        stale_select_used = False
+
+        class EmptyResult:
+            def first(self):  # noqa: ANN202
+                return None
+
+        def exec_with_stale_race_select(statement):  # noqa: ANN001, ANN202
+            nonlocal stale_select_used
+            if not stale_select_used:
+                stale_select_used = True
+                return EmptyResult()
+            return real_exec(statement)
+
+        monkeypatch.setattr(session, "exec", exec_with_stale_race_select)
+
+        candidate = search.upsert_candidate(
+            session,
+            CandidateSourceResult(
+                linkedin_url=race_url,
+                name="Race Candidate",
+                headline="Updated headline",
+                location="Remote",
+                current_company="RaceCo",
+                current_title="PMM",
+                raw={"rank": 2},
+            ),
+        )
+        session.add(
+            SearchResult(
+                search_run_id=search_run_id,
+                candidate_id=candidate.id,
+                linkedin_url=candidate.linkedin_url,
+                rank=2,
+                raw_data={"raw": {"rank": 2}},
+            )
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        search_results = session.exec(
+            select(SearchResult).where(SearchResult.search_run_id == search_run_id)
+        ).all()
+
+    assert len(search_results) == 2
