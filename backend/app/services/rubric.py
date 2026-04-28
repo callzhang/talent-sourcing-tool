@@ -39,27 +39,15 @@ def generate_rubric(job: JobCreate) -> dict[str, Any]:
             "signals": ["Clear writing, strong framing, and sensible prioritization."],
             "red_flags": ["Unclear reasoning, weak product sense, or poor audience judgment."],
         },
+        {
+            "name": "Product and Market Discovery Judgment",
+            "description": "Understands user needs, market context, positioning, and product risk.",
+            "signals": [
+                "Evidence of customer insight, market learning, positioning, or product discovery."
+            ],
+            "red_flags": ["Optimizes execution without validating customer or market assumptions."],
+        },
     ]
-
-    text = " ".join(
-        [
-            job.title,
-            job.description,
-            job.target_profile_text,
-            job.red_flags_text,
-            job.search_notes,
-        ]
-    ).casefold()
-    marketing_terms = ["pmm", "product marketing", "marketing", "gtm", "go-to-market"]
-    if any(term in text for term in marketing_terms):
-        dimensions.append(
-            {
-                "name": "Product Marketing Judgment",
-                "description": "Connects customer insight, positioning, GTM, and product strategy.",
-                "signals": ["Positioning, launch strategy, customer empathy, and market narrative."],
-                "red_flags": ["Generic marketing activity without product or customer judgment."],
-            }
-        )
 
     return {
         "version": 1,
