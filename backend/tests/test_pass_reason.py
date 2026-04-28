@@ -3,10 +3,11 @@ import pytest
 from app.services.pass_reason import draft_pass_reason, suggest_refinements
 
 
-def test_draft_pass_reason_prioritizes_weak_builder_evidence():
+def test_draft_pass_reason_uses_review_level_structured_reason_code():
     review = {
         "risks": ["No public evidence of shipping AI products"],
-        "dimension_scores": [{"name": "Builder Evidence", "score": 35}],
+        "pass_reason_code": "weak_builder_evidence",
+        "dimension_scores": [{"name": "AI Native Signal", "score": 35}],
     }
     draft = draft_pass_reason(review)
 
@@ -15,27 +16,35 @@ def test_draft_pass_reason_prioritizes_weak_builder_evidence():
     assert draft["evidence"] == ["No public evidence of shipping AI products"]
 
 
-def test_draft_pass_reason_does_not_route_from_risk_keywords():
-    review = {
-        "risks": ["Background is mostly enterprise sales leadership, not hands-on product work"],
-        "dimension_scores": [{"name": "Founder / Builder Evidence", "score": 62}],
-    }
-
-    draft = draft_pass_reason(review)
-
-    assert draft["reason_code"] == "insufficient_public_evidence"
-
-
-def test_draft_pass_reason_identifies_insufficient_ai_native_signal():
+def test_draft_pass_reason_uses_dimension_structured_gap_code():
     review = {
         "risks": ["Candidate has general SaaS experience without meaningful AI-native work"],
-        "dimension_scores": [{"name": "AI Native Signal", "score": 40}],
+        "dimension_scores": [
+            {
+                "name": "General evaluation",
+                "score": 40,
+                "gap_code": "insufficient_ai_native_signal",
+            }
+        ],
     }
 
     draft = draft_pass_reason(review)
 
     assert draft["reason_code"] == "insufficient_ai_native_signal"
     assert "ai" in draft["reason_text"].lower()
+
+
+def test_draft_pass_reason_does_not_route_from_dimension_names_or_risk_keywords():
+    review = {
+        "risks": [
+            "Background is mostly enterprise sales leadership, not hands-on builder work"
+        ],
+        "dimension_scores": [{"name": "AI Native Signal", "score": 40}],
+    }
+
+    draft = draft_pass_reason(review)
+
+    assert draft["reason_code"] == "insufficient_public_evidence"
 
 
 def test_draft_pass_reason_falls_back_to_public_evidence_gap():
@@ -108,7 +117,7 @@ def test_suggest_refinements_maps_weak_builder_to_rubric_adjustment():
     assert any(item["suggestion_type"] == "rubric_adjustment" for item in suggestions)
 
 
-def test_suggest_refinements_falls_back_to_jd_rewrite():
+def test_suggest_refinements_returns_no_fallback_for_non_actionable_reasons():
     suggestions = suggest_refinements(
         pass_reasons=[
             {
@@ -118,4 +127,4 @@ def test_suggest_refinements_falls_back_to_jd_rewrite():
         ]
     )
 
-    assert any(item["suggestion_type"] == "jd_rewrite" for item in suggestions)
+    assert suggestions == []

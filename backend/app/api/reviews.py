@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.core.config import settings
 from app.db.models import (
@@ -68,6 +68,85 @@ def mark_review_job_failed(session: Session, review_job_id: str, error_message: 
     review_job.completed_at = datetime.now(UTC)
     session.add(review_job)
     session.commit()
+
+
+def pass_reasons_for_job(session: Session, job_id: str) -> list[dict[str, Any]]:
+    decisions = session.exec(
+        select(CandidateDecision.id).where(CandidateDecision.job_id == job_id)
+    ).all()
+    if not decisions:
+        return []
+
+    pass_reasons = session.exec(
+        select(PassReason).where(col(PassReason.candidate_decision_id).in_(decisions))
+    ).all()
+    return [
+        {
+            "id": pass_reason.id,
+            "reason_code": pass_reason.reason_code,
+            "reason_text": pass_reason.reason_text,
+        }
+        for pass_reason in pass_reasons
+    ]
+
+
+def persist_refinement_suggestions(
+    session: Session,
+    job_id: str,
+    pass_reason: PassReason,
+) -> None:
+    existing_signatures = {
+        _suggestion_signature(
+            suggestion.suggestion_type,
+            suggestion.suggestion_text,
+            suggestion.suggestion_metadata.get("reason_codes", []),
+        )
+        for suggestion in session.exec(
+            select(RefinementSuggestion).where(
+                RefinementSuggestion.job_id == job_id,
+                RefinementSuggestion.status == "pending",
+            )
+        ).all()
+    }
+
+    for suggestion in suggest_refinements(pass_reasons_for_job(session, job_id)):
+        reason_codes = _normalized_reason_codes(suggestion.get("reason_codes", []))
+        suggestion_type = str(suggestion["suggestion_type"])
+        suggestion_text = str(suggestion["suggestion_text"])
+        signature = _suggestion_signature(suggestion_type, suggestion_text, reason_codes)
+        if signature in existing_signatures:
+            continue
+
+        session.add(
+            RefinementSuggestion(
+                job_id=job_id,
+                pass_reason_id=(
+                    pass_reason.id if pass_reason.reason_code in set(reason_codes) else None
+                ),
+                suggestion_type=suggestion_type,
+                suggestion_text=suggestion_text,
+                suggestion_metadata={"reason_codes": list(reason_codes)},
+            )
+        )
+        existing_signatures.add(signature)
+
+
+def _normalized_reason_codes(reason_codes: Any) -> tuple[str, ...]:
+    if not isinstance(reason_codes, list | tuple):
+        return ()
+    return tuple(sorted(str(reason_code) for reason_code in reason_codes if reason_code))
+
+
+def _suggestion_signature(
+    suggestion_type: str,
+    suggestion_text: str,
+    reason_codes: Any,
+) -> tuple[str, str, tuple[str, ...]]:
+    return (
+        suggestion_type,
+        suggestion_text,
+        _normalized_reason_codes(reason_codes),
+    )
 
 
 @router.post("/start")
@@ -204,23 +283,7 @@ def create_decision(
         )
         session.add(pass_reason)
         session.flush()
-        for suggestion in suggest_refinements(
-            [
-                {
-                    "reason_code": pass_reason.reason_code,
-                    "reason_text": pass_reason.reason_text,
-                }
-            ]
-        ):
-            session.add(
-                RefinementSuggestion(
-                    job_id=decision_create.job_id,
-                    pass_reason_id=pass_reason.id,
-                    suggestion_type=str(suggestion["suggestion_type"]),
-                    suggestion_text=str(suggestion["suggestion_text"]),
-                    suggestion_metadata={"reason_codes": suggestion.get("reason_codes", [])},
-                )
-            )
+        persist_refinement_suggestions(session, decision_create.job_id, pass_reason)
     session.commit()
 
     session.refresh(decision)

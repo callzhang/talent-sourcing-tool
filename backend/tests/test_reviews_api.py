@@ -181,7 +181,13 @@ def test_draft_pass_reason_endpoint_returns_draft(client: TestClient, engine: En
             score=4.0,
             raw_review={
                 "risks": ["No public evidence of shipping AI products"],
-                "dimension_scores": [{"name": "Builder Evidence", "score": 35}],
+                "dimension_scores": [
+                    {
+                        "name": "Builder Evidence",
+                        "score": 35,
+                        "reason_code": "weak_builder_evidence",
+                    }
+                ],
             },
         )
         session.add(review)
@@ -341,6 +347,74 @@ def test_refinement_suggestions_endpoint_lists_persisted_suggestions(
     assert len(data) == 1
     assert data[0]["job_id"] == job_id
     assert data[0]["suggestion_type"] == "rubric_adjustment"
+
+
+def test_pass_decision_does_not_create_refinement_for_unknown_reason_code(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "decision": "pass",
+            "pass_reason_code": "manual_pass",
+            "pass_reason_text": "Manually passed for context not covered by the rubric.",
+        },
+    )
+
+    assert response.status_code == 200
+
+    with Session(engine) as session:
+        assert session.exec(select(PassReason)).one().reason_code == "manual_pass"
+        assert session.exec(select(RefinementSuggestion)).all() == []
+
+
+def test_pass_decision_dedupes_pending_refinement_suggestions(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        candidate = Candidate(
+            linkedin_url="https://www.linkedin.com/in/another",
+            name="Another Candidate",
+            profile_data={},
+        )
+        session.add(candidate)
+        session.commit()
+        session.refresh(candidate)
+        other_candidate_id = candidate.id
+
+    payload = {
+        "job_id": job_id,
+        "decision": "pass",
+        "pass_reason_code": "weak_builder_evidence",
+        "pass_reason_text": "No public evidence of shipping AI prototypes.",
+    }
+
+    first_response = client.post(
+        "/api/reviews/decision",
+        json={**payload, "candidate_id": candidate_id},
+    )
+    second_response = client.post(
+        "/api/reviews/decision",
+        json={**payload, "candidate_id": other_candidate_id},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    with Session(engine) as session:
+        pass_reasons = session.exec(select(PassReason)).all()
+        suggestions = session.exec(select(RefinementSuggestion)).all()
+
+    assert len(pass_reasons) == 2
+    assert len(suggestions) == 1
+    assert suggestions[0].status == "pending"
+    assert suggestions[0].suggestion_type == "rubric_adjustment"
+    assert suggestions[0].suggestion_metadata == {"reason_codes": ["weak_builder_evidence"]}
 
 
 def test_proceed_decision_creates_candidate_decision(client: TestClient, engine: Engine):
