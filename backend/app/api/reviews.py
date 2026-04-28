@@ -167,6 +167,23 @@ def read_review(session: Session, review: Review) -> ReviewRead:
     )
 
 
+def validate_review_identity(
+    review_data: dict[str, Any],
+    review_job: ReviewJob,
+    job: Job,
+    candidate: Candidate,
+) -> None:
+    if review_job.job_id != job.id or review_job.candidate_id != candidate.id:
+        raise ValueError("Review job does not match current job and candidate")
+
+    if review_data["job_id"] != job.id or review_data["candidate_id"] != candidate.id:
+        raise ValueError(
+            "Review output does not match review job: "
+            f"expected job_id={job.id}, candidate_id={candidate.id}; "
+            f"got job_id={review_data['job_id']}, candidate_id={review_data['candidate_id']}"
+        )
+
+
 @router.get("/latest", response_model=ReviewRead | None)
 def get_latest_review(
     job_id: str,
@@ -231,6 +248,12 @@ def start_review(
 
     try:
         review_data = worker_result.review
+        validate_review_identity(
+            review_data=review_data,
+            review_job=review_job,
+            job=job,
+            candidate=candidate,
+        )
         review = Review(
             review_job_id=review_job.id,
             summary=str(review_data["decision_summary"]),

@@ -166,6 +166,65 @@ def test_start_review_marks_job_failed_when_worker_output_breaks_persistence(
     assert saved_reviews == []
 
 
+@pytest.mark.parametrize(
+    ("review_job_id_key", "wrong_value"),
+    [
+        ("job_id", "job_wrong"),
+        ("candidate_id", "candidate_wrong"),
+    ],
+)
+def test_start_review_rejects_worker_output_for_wrong_job_or_candidate(
+    client: TestClient,
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    review_job_id_key: str,
+    wrong_value: str,
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    def fake_run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        input_path = workspace / "input.json"
+        output_path = workspace / "review.json"
+        review = {
+            "candidate_id": payload["candidate"]["id"],
+            "job_id": payload["job"]["id"],
+            "overall_score": 8.5,
+            "recommendation": "proceed",
+            "decision_summary": "This output is for the wrong entity.",
+        }
+        review[review_job_id_key] = wrong_value
+        return ReviewWorkerResult(
+            workspace=workspace,
+            input_path=input_path,
+            output_path=output_path,
+            review=review,
+        )
+
+    from app.api import reviews
+
+    monkeypatch.setattr(reviews.ReviewWorker, "run_review", fake_run_review)
+
+    response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert response.status_code == 502
+    assert "does not match review job" in response.json()["detail"]
+
+    with Session(engine) as session:
+        review_job = session.exec(select(ReviewJob)).one()
+        saved_reviews = session.exec(select(Review)).all()
+
+    assert review_job.status == "failed"
+    assert review_job.error_message is not None
+    assert "does not match review job" in review_job.error_message
+    assert saved_reviews == []
+
+
 def test_draft_pass_reason_endpoint_returns_draft(client: TestClient, engine: Engine):
     job_id, candidate_id = seed_review_inputs(engine)
     with Session(engine) as session:

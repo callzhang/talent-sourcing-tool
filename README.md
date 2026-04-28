@@ -98,13 +98,14 @@ A real Bright Data integration should implement the same `SourcingConnector.sear
 Review jobs are started through the backend. The worker:
 
 - creates a temporary review workspace under `TALENT_REVIEW_WORKSPACE_ROOT`;
-- creates a temporary `HOME` for the Codex process;
+- creates temporary `HOME` and `CODEX_HOME` directories for the Codex process;
 - writes `input.json` and `review.schema.json`;
-- runs `TALENT_CODEX_BINARY exec <workspace>`;
+- runs `TALENT_CODEX_BINARY exec` from the review workspace with a prompt that instructs Codex to read `input.json`, follow `review.schema.json`, and write `review.json`;
+- when the configured command is `codex exec`, adds `--cd <workspace>`, `--skip-git-repo-check`, `--ephemeral`, `--ignore-user-config`, and `--ignore-rules` to avoid loading unrelated local Codex config or project rules;
 - requires the worker to create `review.json`;
 - validates required review fields before persisting the review.
 
-The Codex process is file-boundary-only from the backend perspective. It should not write directly to the database. Generated review workspaces are ignored by git.
+The Codex process is file-boundary-only from the backend perspective. It should not write directly to the database. The backend preserves the parent process environment for executable lookup and credentials, but isolates Codex state/config with temporary `HOME` and `CODEX_HOME` plus the Codex exec flags above. Generated review workspaces are ignored by git.
 
 ## Database Note
 

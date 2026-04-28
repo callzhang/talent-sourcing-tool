@@ -20,6 +20,13 @@ REQUIRED_REVIEW_FIELDS = {
 }
 
 
+REVIEW_PROMPT = """You are running a file-protocol candidate review in this workspace.
+Read input.json for the review job, candidate, job, and rubric payload.
+Follow review.schema.json exactly for the output contract.
+Then write review.json in this current workspace as a single JSON object.
+Do not write directly to any database or modify files other than review.json."""
+
+
 class ReviewOutput(BaseModel):
     candidate_id: str
     job_id: str
@@ -53,6 +60,9 @@ class ReviewWorker:
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         workspace = Path(tempfile.mkdtemp(prefix=f"{review_job_id}-", dir=self.workspace_root))
         temp_home = Path(tempfile.mkdtemp(prefix=f"{review_job_id}-home-", dir=self.workspace_root))
+        temp_codex_home = Path(
+            tempfile.mkdtemp(prefix=f"{review_job_id}-codex-home-", dir=self.workspace_root)
+        )
         input_path = workspace / "input.json"
         output_path = workspace / "review.json"
 
@@ -87,9 +97,9 @@ class ReviewWorker:
             )
         )
 
-        env = {**os.environ, "HOME": str(temp_home)}
+        env = {**os.environ, "HOME": str(temp_home), "CODEX_HOME": str(temp_codex_home)}
         completed = subprocess.run(
-            [*self.codex_command, str(workspace)],
+            self._review_command(workspace),
             cwd=workspace,
             env=env,
             timeout=600,
@@ -122,3 +132,23 @@ class ReviewWorker:
             output_path=output_path,
             review=validated_review.model_dump(),
         )
+
+    def _review_command(self, workspace: Path) -> list[str]:
+        command = [*self.codex_command]
+        if self._is_codex_exec_command(command):
+            command.extend(
+                [
+                    "--cd",
+                    str(workspace),
+                    "--skip-git-repo-check",
+                    "--ephemeral",
+                    "--ignore-user-config",
+                    "--ignore-rules",
+                ]
+            )
+        command.append(REVIEW_PROMPT)
+        return command
+
+    @staticmethod
+    def _is_codex_exec_command(command: list[str]) -> bool:
+        return len(command) >= 2 and Path(command[0]).name == "codex" and command[1] == "exec"

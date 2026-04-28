@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -11,10 +12,9 @@ def test_review_worker_writes_input_and_reads_review_json(tmp_path: Path):
     fake_codex.write_text(
         """
 import json
-import sys
 from pathlib import Path
 
-workspace = Path(sys.argv[-1])
+workspace = Path.cwd()
 payload = json.loads((workspace / "input.json").read_text())
 (workspace / "review.json").write_text(json.dumps({
     "candidate_id": payload["candidate_id"],
@@ -46,6 +46,62 @@ payload = json.loads((workspace / "input.json").read_text())
     assert saved_input["job_id"] == "job_123"
 
 
+def test_review_worker_invokes_codex_with_prompt_and_isolated_environment(
+    tmp_path: Path,
+):
+    fake_codex = tmp_path / "codex"
+    invocation_path = tmp_path / "invocation.json"
+    fake_codex.write_text(
+        f"""#!/usr/bin/env python
+import json
+import os
+import sys
+from pathlib import Path
+
+cwd = Path.cwd()
+payload = json.loads((cwd / "input.json").read_text())
+Path({str(invocation_path)!r}).write_text(json.dumps({{
+    "argv": sys.argv[1:],
+    "cwd": str(cwd),
+    "home": os.environ["HOME"],
+    "codex_home": os.environ["CODEX_HOME"],
+}}))
+(cwd / "review.json").write_text(json.dumps({{
+    "candidate_id": payload["candidate_id"],
+    "job_id": payload["job_id"],
+    "overall_score": 8.5,
+    "recommendation": "proceed",
+    "decision_summary": "Strong match for the role.",
+}}))
+""".strip()
+    )
+    fake_codex.chmod(fake_codex.stat().st_mode | 0o111)
+
+    worker = ReviewWorker(codex_command=[str(fake_codex), "exec"], workspace_root=tmp_path)
+
+    result = worker.run_review(
+        "review_job_123",
+        {"candidate_id": "candidate_123", "job_id": "job_123"},
+    )
+
+    invocation = json.loads(invocation_path.read_text())
+    assert invocation["cwd"] == str(result.workspace)
+    assert invocation["home"].startswith(str(tmp_path))
+    assert invocation["codex_home"].startswith(str(tmp_path))
+    assert invocation["home"] != os.environ.get("HOME")
+    assert invocation["codex_home"] != os.environ.get("CODEX_HOME")
+    assert "--cd" in invocation["argv"]
+    assert str(result.workspace) in invocation["argv"]
+    assert "--ephemeral" in invocation["argv"]
+    assert "--ignore-user-config" in invocation["argv"]
+    assert "--ignore-rules" in invocation["argv"]
+    prompt = invocation["argv"][-1]
+    assert "Read input.json" in prompt
+    assert "review.schema.json" in prompt
+    assert "write review.json" in prompt
+    assert prompt != str(result.workspace)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -68,10 +124,9 @@ def test_review_worker_rejects_invalid_review_output(
     fake_codex.write_text(
         f"""
 import json
-import sys
 from pathlib import Path
 
-workspace = Path(sys.argv[-1])
+workspace = Path.cwd()
 (workspace / "review.json").write_text(json.dumps({review!r}))
 """.strip()
     )
