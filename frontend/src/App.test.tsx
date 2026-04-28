@@ -12,6 +12,8 @@ afterEach(() => {
 it("renders the app shell on the jobs tab", () => {
   render(<App />);
 
+  expect(screen.getByRole("banner")).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Talent Sourcing Tool" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "JD Management" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Jobs" })).toHaveAttribute("aria-pressed", "true");
