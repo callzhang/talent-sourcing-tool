@@ -137,3 +137,37 @@ workspace = Path.cwd()
             "review_job_123",
             {"candidate_id": "candidate_123", "job_id": "job_123"},
         )
+
+
+def test_review_worker_reports_command_failure(tmp_path: Path):
+    fake_codex = tmp_path / "fake_codex.py"
+    fake_codex.write_text(
+        "import sys\nprint('bad stdout')\nprint('bad stderr', file=sys.stderr)\nsys.exit(3)"
+    )
+    worker = ReviewWorker(codex_command=["python", str(fake_codex)], workspace_root=tmp_path)
+
+    with pytest.raises(RuntimeError, match="exit code 3"):
+        worker.run_review("review_job_123", {"candidate_id": "candidate_123", "job_id": "job_123"})
+
+
+def test_review_worker_reports_missing_output(tmp_path: Path):
+    fake_codex = tmp_path / "fake_codex.py"
+    fake_codex.write_text("# intentionally does not write review.json")
+    worker = ReviewWorker(codex_command=["python", str(fake_codex)], workspace_root=tmp_path)
+
+    with pytest.raises(RuntimeError, match="did not create"):
+        worker.run_review("review_job_123", {"candidate_id": "candidate_123", "job_id": "job_123"})
+
+
+def test_review_worker_reports_missing_required_fields(tmp_path: Path):
+    fake_codex = tmp_path / "fake_codex.py"
+    fake_codex.write_text(
+        """
+from pathlib import Path
+Path("review.json").write_text("{}")
+""".strip()
+    )
+    worker = ReviewWorker(codex_command=["python", str(fake_codex)], workspace_root=tmp_path)
+
+    with pytest.raises(RuntimeError, match="missing required fields"):
+        worker.run_review("review_job_123", {"candidate_id": "candidate_123", "job_id": "job_123"})

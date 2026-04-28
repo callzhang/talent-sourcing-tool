@@ -117,6 +117,32 @@ def test_get_search_run_returns_candidates(client: TestClient):
     assert len(data["candidates"]) == 1
 
 
+def test_get_search_run_404s_for_missing_run(client: TestClient):
+    response = client.get("/api/search/search_run_missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Search run not found"
+
+
+def test_list_search_runs_handles_non_dict_params(client: TestClient, engine: Engine):
+    job_id = create_job(client)
+    with Session(engine) as session:
+        search_run = SearchRun(
+            job_id=job_id,
+            query="bad params",
+            provider="bright_data",
+            status="completed",
+            run_metadata={"params": "not-a-dict"},
+        )
+        session.add(search_run)
+        session.commit()
+
+    response = client.get(f"/api/search?job_id={job_id}")
+
+    assert response.status_code == 200
+    assert response.json()[0]["params"] == {}
+
+
 def test_search_returns_404_when_job_does_not_exist(client: TestClient):
     response = client.post(
         "/api/search",
@@ -231,6 +257,8 @@ def test_search_stores_json_unsafe_raw_payload_safely(
                         "founded_on": founded_on,
                         "score": Decimal("9.75"),
                         "avatar": b"binary-avatar",
+                        "tags": {"founder", "builder"},
+                        "custom": object(),
                     },
                 )
             ]
@@ -254,7 +282,19 @@ def test_search_stores_json_unsafe_raw_payload_safely(
     assert raw["founded_on"] == founded_on.isoformat()
     assert raw["score"] == "9.75"
     assert raw["avatar"] == "binary-avatar"
+    assert sorted(raw["tags"]) == ["builder", "founder"]
+    assert raw["custom"].startswith("<object object at")
     assert candidate.profile_data["raw"] == raw
+
+
+def test_mark_search_failed_ignores_missing_search_run(engine: Engine):
+    from app.api.search import mark_search_failed
+
+    with Session(engine) as session:
+        mark_search_failed(session, "search_run_missing", "missing")
+
+    with Session(engine) as session:
+        assert session.exec(select(SearchRun)).all() == []
 
 
 def test_search_marks_run_failed_when_persistence_fails(

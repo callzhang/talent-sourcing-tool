@@ -57,7 +57,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   fireEvent.change(screen.getByLabelText("Candidate limit"), {
     target: { value: "2" }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create search run" }));
+  fireEvent.submit(screen.getByLabelText("Search query").closest("form") as HTMLFormElement);
 
   await waitFor(() => expect(onCandidatesFound).toHaveBeenCalledWith([candidate]));
   expect(await screen.findByText("Search completed with 1 candidates.")).toBeInTheDocument();
@@ -73,6 +73,67 @@ it("loads persisted runs and reports candidates from a new search", async () => 
       })
     })
   );
+});
+
+it("requires a selected JD before searching", () => {
+  render(
+    <SearchPage
+      jobs={[]}
+      selectedJobId={null}
+      onSelectJob={() => undefined}
+      onCandidatesFound={() => undefined}
+    />
+  );
+
+  fireEvent.change(screen.getByLabelText("Search query"), {
+    target: { value: "ai builders" }
+  });
+  fireEvent.submit(screen.getByLabelText("Search query").closest("form") as HTMLFormElement);
+
+  expect(screen.getByText("Create or select a JD before searching.")).toBeInTheDocument();
+});
+
+it("shows search run load and create errors", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockImplementationOnce(() => errorResponse("Unable to load search runs."))
+    .mockImplementationOnce(() => errorResponse("Unable to create search run."));
+
+  render(
+    <SearchPage
+      jobs={[job]}
+      selectedJobId="job_1"
+      onSelectJob={() => undefined}
+      onCandidatesFound={() => undefined}
+    />
+  );
+
+  expect(await screen.findByText("GET /api/search?job_id=job_1 failed with 500: Unable to load search runs.")).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Search query"), {
+    target: { value: "ai builders" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Create search run" }));
+
+  expect(await screen.findByText("POST /api/search failed with 500: Unable to create search run.")).toBeInTheDocument();
+});
+
+it("selects a different JD from the search form", () => {
+  const onSelectJob = vi.fn();
+
+  render(
+    <SearchPage
+      jobs={[job, { ...job, id: "job_2", title: "Business Intern" }]}
+      selectedJobId="job_1"
+      onSelectJob={onSelectJob}
+      onCandidatesFound={() => undefined}
+    />
+  );
+
+  fireEvent.change(screen.getByLabelText("JD"), {
+    target: { value: "job_2" }
+  });
+
+  expect(onSelectJob).toHaveBeenCalledWith("job_2");
 });
 
 const job: Job = {
@@ -105,6 +166,16 @@ function jsonResponse(body: unknown) {
   return Promise.resolve(
     new Response(JSON.stringify(body), {
       status: 200,
+      headers: { "Content-Type": "application/json" }
+    })
+  );
+}
+
+function errorResponse(detail: string) {
+  return Promise.resolve(
+    new Response(JSON.stringify({ detail }), {
+      status: 500,
+      statusText: "Internal Server Error",
       headers: { "Content-Type": "application/json" }
     })
   );

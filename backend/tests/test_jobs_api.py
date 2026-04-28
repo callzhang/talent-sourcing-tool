@@ -147,3 +147,30 @@ def test_get_job_with_latest_rubric_404s_for_missing_job(client: TestClient):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Job not found"
+
+
+def test_list_jobs_returns_created_jobs(client: TestClient):
+    response = client.post(
+        "/api/jobs",
+        json={"title": "AI Product Engineer", "description": "Build demos"},
+    )
+    assert response.status_code == 200
+
+    list_response = client.get("/api/jobs")
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["title"] == "AI Product Engineer"
+
+
+def test_get_job_404s_when_rubric_missing(client: TestClient, engine: Engine):
+    with Session(engine) as session:
+        job = Job(title="No Rubric", description="Missing rubric")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.id
+
+    response = client.get(f"/api/jobs/{job_id}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Rubric not found"

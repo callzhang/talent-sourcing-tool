@@ -23,6 +23,45 @@ def test_list_candidates_filters_to_searched_candidates(client: TestClient, engi
     assert data[0]["last_search_query"] == "AI product marketer"
 
 
+def test_list_candidates_without_job_returns_all_candidates_and_ignores_dangling_results(
+    client: TestClient, engine: Engine
+):
+    _job_id, candidate_id, unsearched_candidate_id = seed_candidates(engine)
+
+    response = client.get("/api/candidates")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert {candidate["id"] for candidate in data} == {candidate_id, unsearched_candidate_id}
+    unsearched = next(candidate for candidate in data if candidate["id"] == unsearched_candidate_id)
+    assert unsearched["last_search_run_id"] is None
+
+
+def test_latest_search_result_ignores_missing_search_run():
+    from app.api.candidates import latest_search_result_for_candidate
+
+    class ResultSet:
+        def all(self):  # noqa: ANN202
+            return [
+                SearchResult(
+                    search_run_id="search_run_missing",
+                    candidate_id="candidate_1",
+                    linkedin_url="https://www.linkedin.com/in/one",
+                    rank=1,
+                    raw_data={},
+                )
+            ]
+
+    class FakeSession:
+        def exec(self, statement):  # noqa: ANN001, ANN202
+            return ResultSet()
+
+        def get(self, model, object_id):  # noqa: ANN001, ANN202
+            return None
+
+    assert latest_search_result_for_candidate(FakeSession(), "candidate_1", None) == (None, None)
+
+
 def test_get_candidate_returns_candidate_detail(client: TestClient, engine: Engine):
     job_id, candidate_id, _unsearched_candidate_id = seed_candidates(engine)
 

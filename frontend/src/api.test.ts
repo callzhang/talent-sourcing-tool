@@ -40,6 +40,42 @@ it("throws an ApiError with status and backend detail for non-2xx responses", as
   );
 });
 
+it("handles object details, plain text errors, and no-content responses", async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: { code: "bad_request" } }), {
+        status: 400,
+        statusText: "Bad Request",
+        headers: { "Content-Type": "application/json" }
+      })
+    )
+    .mockResolvedValueOnce(
+      new Response("plain failure", {
+        status: 502,
+        statusText: "Bad Gateway",
+        headers: { "Content-Type": "text/plain" }
+      })
+    )
+    .mockResolvedValueOnce(new Response("", { status: 503, statusText: "Service Unavailable" }))
+    .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+  await expect(api.listJobs()).rejects.toMatchObject({
+    status: 400,
+    detail: { code: "bad_request" }
+  });
+  await expect(api.listJobs()).rejects.toMatchObject({
+    status: 502,
+    detail: "plain failure"
+  });
+  await expect(api.listJobs()).rejects.toMatchObject({
+    status: 503,
+    detail: "Service Unavailable"
+  });
+  await expect(api.listJobs()).resolves.toBeUndefined();
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+});
+
 it("exposes read endpoints needed by the task pages", async () => {
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     Promise.resolve(

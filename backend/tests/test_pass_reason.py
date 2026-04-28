@@ -116,6 +116,25 @@ def test_draft_pass_reason_filters_evidence_to_user_facing_scalars():
     assert draft["evidence"] == ["Visible risk", "123", "True", "Unclear AI depth", "False"]
 
 
+def test_draft_pass_reason_ignores_non_scalar_evidence_and_non_dict_dimensions():
+    draft = draft_pass_reason(
+        {
+            "risks": [object()],
+            "dimension_scores": [
+                "not-a-dimension",
+                {
+                    "name": "Weak dimension",
+                    "score": 40,
+                    "reason_code": "weak_builder_evidence",
+                },
+            ],
+        }
+    )
+
+    assert draft["reason_code"] == "weak_builder_evidence"
+    assert draft["evidence"] == []
+
+
 def test_suggest_refinements_mentions_search_query():
     suggestions = suggest_refinements(
         pass_reasons=[

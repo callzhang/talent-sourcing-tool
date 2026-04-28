@@ -26,6 +26,27 @@ it("switches between shell tabs without routing dependencies", () => {
   expect(screen.getByRole("button", { name: "Search" })).toHaveAttribute("aria-pressed", "true");
 });
 
+it("opens refinements and ignores late job loads after unmount", async () => {
+  let resolveJobs: (response: Response) => void = () => undefined;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/jobs")) {
+      return new Promise<Response>((resolve) => {
+        resolveJobs = resolve;
+      });
+    }
+    return jsonResponse([]);
+  });
+
+  const { unmount } = render(<App />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Refinements" }));
+  expect(screen.getByRole("heading", { name: "Refinement Suggestions" })).toBeInTheDocument();
+
+  unmount();
+  resolveJobs(await jsonResponse([jobWithRubric.job]));
+});
+
 it("creates a job, displays its rubric, and uses it for search and candidates", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
@@ -120,6 +141,9 @@ it("starts review, drafts a pass reason, and submits pass feedback", async () =>
   fireEvent.click(screen.getByRole("button", { name: "Submit pass" }));
 
   expect(await screen.findByText("Saved pass decision.")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Back to candidates" }));
+  expect(await screen.findByRole("heading", { name: "Candidates" })).toBeInTheDocument();
 });
 
 const jobWithRubric = {

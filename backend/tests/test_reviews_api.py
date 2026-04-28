@@ -225,6 +225,98 @@ def test_start_review_rejects_worker_output_for_wrong_job_or_candidate(
     assert saved_reviews == []
 
 
+def test_start_review_404s_for_missing_job_or_candidate_and_400s_without_rubric(
+    client: TestClient, engine: Engine
+):
+    response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": "candidate_missing", "job_id": "job_missing"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Job not found"
+
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        session.exec(select(Rubric)).all()
+        rubric = session.exec(select(Rubric)).one()
+        session.delete(rubric)
+        session.commit()
+
+    missing_candidate_response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": "candidate_missing", "job_id": job_id},
+    )
+    assert missing_candidate_response.status_code == 404
+    assert missing_candidate_response.json()["detail"] == "Candidate not found"
+
+    no_rubric_response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+    assert no_rubric_response.status_code == 400
+    assert no_rubric_response.json()["detail"] == "Job has no rubric"
+
+
+def test_start_review_marks_failed_when_worker_raises(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    def fail_run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+        raise RuntimeError("worker unavailable")
+
+    from app.api import reviews
+
+    monkeypatch.setattr(reviews.ReviewWorker, "run_review", fail_run_review)
+
+    response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "worker unavailable"
+    with Session(engine) as session:
+        review_job = session.exec(select(ReviewJob)).one()
+    assert review_job.status == "failed"
+    assert review_job.error_message == "worker unavailable"
+
+
+def test_review_helpers_cover_defensive_paths(engine: Engine):
+    from app.api.reviews import (
+        _normalized_reason_codes,
+        mark_review_job_failed,
+        pass_reasons_for_job,
+        validate_review_identity,
+    )
+
+    with Session(engine) as session:
+        assert pass_reasons_for_job(session, "job_missing") == []
+        assert _normalized_reason_codes("not-a-list") == ()
+        mark_review_job_failed(session, "review_job_missing", "missing")
+
+        job = Job(title="AI Product Engineer", description="Build demos")
+        candidate = Candidate(
+            linkedin_url="https://www.linkedin.com/in/helper",
+            name="Helper Candidate",
+            profile_data={},
+        )
+        session.add(job)
+        session.add(candidate)
+        session.commit()
+        session.refresh(job)
+        session.refresh(candidate)
+        review_job = ReviewJob(job_id="job_other", candidate_id=candidate.id, status="running")
+
+        with pytest.raises(ValueError, match="does not match current job"):
+            validate_review_identity(
+                review_data={"job_id": job.id, "candidate_id": candidate.id},
+                review_job=review_job,
+                job=job,
+                candidate=candidate,
+            )
+
+
 def test_draft_pass_reason_endpoint_returns_draft(client: TestClient, engine: Engine):
     job_id, candidate_id = seed_review_inputs(engine)
     with Session(engine) as session:
@@ -316,6 +408,55 @@ def test_get_latest_review_returns_null_when_absent(client: TestClient, engine: 
 
     assert response.status_code == 200
     assert response.json() is None
+
+
+def test_get_latest_review_404s_for_missing_job_or_candidate(
+    client: TestClient, engine: Engine
+):
+    job_id, _candidate_id = seed_review_inputs(engine)
+
+    missing_job_response = client.get(
+        "/api/reviews/latest?job_id=job_missing&candidate_id=candidate_missing"
+    )
+    assert missing_job_response.status_code == 404
+    assert missing_job_response.json()["detail"] == "Job not found"
+
+    missing_candidate_response = client.get(
+        f"/api/reviews/latest?job_id={job_id}&candidate_id=candidate_missing"
+    )
+    assert missing_candidate_response.status_code == 404
+    assert missing_candidate_response.json()["detail"] == "Candidate not found"
+
+
+def test_get_latest_review_returns_null_when_review_job_has_no_review(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        session.add(ReviewJob(job_id=job_id, candidate_id=candidate_id, status="completed"))
+        session.commit()
+
+    response = client.get(f"/api/reviews/latest?job_id={job_id}&candidate_id={candidate_id}")
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_read_review_404s_when_review_job_is_missing(engine: Engine):
+    from app.api.reviews import read_review
+
+    with Session(engine) as session:
+        review = Review(
+            review_job_id="review_job_missing",
+            summary="orphan review",
+            evidence=[],
+            recommendation="pass",
+            score=1,
+            raw_review={},
+        )
+
+        with pytest.raises(Exception, match="404: Review job not found"):
+            read_review(session, review)
 
 
 def test_draft_pass_reason_endpoint_404s_for_missing_review(client: TestClient):
@@ -464,6 +605,13 @@ def test_refinement_suggestions_endpoint_lists_persisted_suggestions(
     assert data[0]["suggestion_type"] == "rubric_adjustment"
 
 
+def test_refinement_suggestions_endpoint_404s_for_missing_job(client: TestClient):
+    response = client.get("/api/reviews/refinements?job_id=job_missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Job not found"
+
+
 def test_pass_decision_does_not_create_refinement_for_unknown_reason_code(
     client: TestClient, engine: Engine
 ):
@@ -560,6 +708,81 @@ def test_proceed_decision_creates_candidate_decision(client: TestClient, engine:
     assert decision.notes == "Move to recruiter screen."
     assert decision.decided_by == "test-user"
     assert pass_reasons == []
+
+
+def test_decision_404s_for_missing_job_candidate_review_or_review_job(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    missing_job_response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": "job_missing",
+            "candidate_id": candidate_id,
+            "decision": "proceed",
+        },
+    )
+    assert missing_job_response.status_code == 404
+    assert missing_job_response.json()["detail"] == "Job not found"
+
+    missing_candidate_response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": "candidate_missing",
+            "decision": "proceed",
+        },
+    )
+    assert missing_candidate_response.status_code == 404
+    assert missing_candidate_response.json()["detail"] == "Candidate not found"
+
+    missing_review_response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "review_id": "review_missing",
+            "decision": "proceed",
+        },
+    )
+    assert missing_review_response.status_code == 404
+    assert missing_review_response.json()["detail"] == "Review not found"
+
+    with Session(engine) as session:
+        from app.api.reviews import create_decision
+        from app.schemas import DecisionCreate
+
+        orphan_review = Review(
+            id="review_orphan",
+            review_job_id="review_job_missing",
+            summary="orphan review",
+            evidence=[],
+            recommendation="proceed",
+            score=8,
+            raw_review={},
+        )
+
+        real_get = session.get
+
+        def get_with_orphan_review(model, object_id):  # noqa: ANN001, ANN202
+            if model is Review and object_id == "review_orphan":
+                return orphan_review
+            if model is ReviewJob and object_id == "review_job_missing":
+                return None
+            return real_get(model, object_id)
+
+        session.get = get_with_orphan_review  # type: ignore[method-assign]
+        with pytest.raises(Exception, match="404: Review job not found"):
+            create_decision(
+                DecisionCreate(
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    review_id="review_orphan",
+                    decision="proceed",
+                ),
+                session,
+            )
 
 
 def test_decision_rejects_review_owned_by_different_candidate(

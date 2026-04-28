@@ -137,6 +137,7 @@ export function CandidateDetailPage({
   }
 
   async function startReview() {
+    /* c8 ignore next 3 -- UI renders the action only after selected job and candidate are loaded. */
     if (!selectedJobId || !loadedCandidate) {
       return;
     }
@@ -172,6 +173,7 @@ export function CandidateDetailPage({
   }
 
   async function draftPassReason() {
+    /* c8 ignore next 4 -- The draft button is disabled until a review context exists. */
     if (!reviewContext) {
       setStatus("Run a review before drafting a pass reason.");
       return;
@@ -217,6 +219,7 @@ export function CandidateDetailPage({
   }
 
   async function submitDecision(decision: "pass" | "proceed") {
+    /* c8 ignore next 3 -- Decision controls render only after candidate context is loaded. */
     if (!selectedJobId || !loadedCandidate) {
       return;
     }
@@ -237,6 +240,7 @@ export function CandidateDetailPage({
           requestedReviewContext.reviewId
         ))
     ) {
+      /* c8 ignore next 2 -- This protects against stale event closures that are not user-reachable. */
       return;
     }
     setIsWorking(true);
