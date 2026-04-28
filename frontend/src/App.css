@@ -1,0 +1,153 @@
+:root {
+  color: #162018;
+  background: #f4f0e5;
+  font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 16%, rgb(246 172 79 / 28%), transparent 28rem),
+    linear-gradient(135deg, #fffaf0 0%, #ece6d2 48%, #dfe8d4 100%);
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 36px 0;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: end;
+  padding: 32px;
+  border: 1px solid rgb(22 32 24 / 14%);
+  border-radius: 28px;
+  background: rgb(255 252 244 / 78%);
+  box-shadow: 0 24px 70px rgb(50 45 32 / 14%);
+}
+
+.eyebrow,
+.panel-kicker {
+  margin: 0 0 10px;
+  color: #7a4b17;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 760px;
+  margin-bottom: 12px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.5rem, 7vw, 5.8rem);
+  line-height: 0.9;
+  letter-spacing: -0.07em;
+}
+
+h2 {
+  margin-bottom: 12px;
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  letter-spacing: -0.055em;
+}
+
+.hero-copy {
+  max-width: 620px;
+  margin-bottom: 0;
+  color: #4f594e;
+  font-size: 1.08rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.tab {
+  border: 1px solid rgb(22 32 24 / 16%);
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: #273127;
+  background: #fffaf0;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.tab:hover {
+  transform: translateY(-1px);
+}
+
+.tab[aria-pressed="true"] {
+  color: #fffaf0;
+  background: #1f321f;
+}
+
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+  gap: 24px;
+  margin-top: 24px;
+  padding: 32px;
+  border-radius: 28px;
+  color: #fdf6e6;
+  background:
+    linear-gradient(145deg, rgb(31 50 31 / 92%), rgb(42 71 54 / 90%)),
+    #1f321f;
+}
+
+.panel p {
+  max-width: 620px;
+  margin-bottom: 0;
+  color: rgb(253 246 230 / 76%);
+}
+
+.panel-kicker {
+  color: #e9a856;
+}
+
+.panel-note {
+  align-self: stretch;
+  padding: 18px;
+  border: 1px solid rgb(253 246 230 / 18%);
+  border-radius: 20px;
+  color: rgb(253 246 230 / 78%);
+  background: rgb(253 246 230 / 8%);
+}
+
+@media (max-width: 760px) {
+  .hero,
+  .panel {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+
+  .tabs {
+    justify-content: flex-start;
+  }
+}
