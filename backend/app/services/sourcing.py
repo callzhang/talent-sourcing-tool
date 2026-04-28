@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from urllib.parse import quote_plus
 
 
-SEARCH_CHANNELS = ("linkedin", "github", "openreview", "arxiv", "exa")
+SEARCH_CHANNELS = ("linkedin", "github", "openreview", "arxiv", "exa", "brightdata_discover")
 RESEARCH_CHANNELS = ("openreview", "arxiv")
 TECHNICAL_CHANNELS = ("github",)
 
@@ -117,7 +117,7 @@ def normalize_search_channels(channels: list[str] | tuple[str, ...] | Any) -> li
 def default_job_search_channels(title: str, description: str) -> list[str]:
     role_text = f"{title} {description}".casefold()
     if any(keyword in role_text for keyword in ("research", "scientist", "algorithm", "applied ai")):
-        return ["linkedin", "github", "openreview", "arxiv", "exa"]
+        return ["linkedin", "github", "openreview", "arxiv", "exa", "brightdata_discover"]
     if any(
         keyword in role_text
         for keyword in (
@@ -129,8 +129,8 @@ def default_job_search_channels(title: str, description: str) -> list[str]:
             "founder",
         )
     ):
-        return ["linkedin", "github", "exa"]
-    return ["linkedin", "exa"]
+        return ["linkedin", "github", "exa", "brightdata_discover"]
+    return ["linkedin", "exa", "brightdata_discover"]
 
 
 def candidate_sources(name: str, linkedin_url: str, channels: list[str]) -> list[dict[str, str]]:
@@ -171,6 +171,14 @@ def candidate_sources(name: str, linkedin_url: str, channels: list[str]) -> list
                     "source_type": "exa",
                     "title": "Exa web search",
                     "url": f"https://exa.ai/search?q={encoded_name}",
+                }
+            )
+        elif channel == "brightdata_discover":
+            sources.append(
+                {
+                    "source_type": "brightdata_discover",
+                    "title": "Bright Data Discover search",
+                    "url": "https://brightdata.com/",
                 }
             )
     return sources

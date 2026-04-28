@@ -8,7 +8,8 @@ const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
   { value: "github", label: "GitHub" },
   { value: "openreview", label: "OpenReview" },
   { value: "arxiv", label: "arXiv" },
-  { value: "exa", label: "Exa" }
+  { value: "exa", label: "Exa" },
+  { value: "brightdata_discover", label: "Bright Data Discover" }
 ];
 
 type JobsPageProps = {
@@ -25,7 +26,12 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
   const [targetProfile, setTargetProfile] = useState("");
   const [redFlags, setRedFlags] = useState("");
   const [searchNotes, setSearchNotes] = useState("");
-  const [searchChannels, setSearchChannels] = useState<SearchChannel[]>(["linkedin", "github", "exa"]);
+  const [searchChannels, setSearchChannels] = useState<SearchChannel[]>([
+    "linkedin",
+    "github",
+    "exa",
+    "brightdata_discover"
+  ]);
   const [status, setStatus] = useState("Loading jobs...");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -97,7 +103,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
       setTargetProfile("");
       setRedFlags("");
       setSearchNotes("");
-      setSearchChannels(["linkedin", "github", "exa"]);
+      setSearchChannels(["linkedin", "github", "exa", "brightdata_discover"]);
       setStatus("JD created and rubric generated.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to create JD.");

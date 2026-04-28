@@ -23,7 +23,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
           job_id: "job_1",
           query: "existing ai pmm search",
           provider: "bright_data",
-          channels: ["linkedin", "github", "exa"],
+          channels: ["linkedin", "github", "exa", "brightdata_discover"],
           status: "completed",
           params: { limit: 3 },
           candidate_count: 3,
@@ -38,7 +38,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
         job_id: "job_1",
         query: "existing ai pmm search",
         provider: "bright_data",
-        channels: ["linkedin", "github", "exa"],
+        channels: ["linkedin", "github", "exa", "brightdata_discover"],
         status: "completed",
         params: { limit: 3 },
         candidate_count: 1,
@@ -69,7 +69,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
 
   expect(await screen.findByText("existing ai pmm search")).toBeInTheDocument();
   expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
-  expect(screen.getAllByText("LinkedIn + GitHub + Exa")).toHaveLength(2);
+  expect(screen.getAllByText("LinkedIn + GitHub + Exa + Bright Data Discover")).toHaveLength(2);
   expect(screen.getByText("Searching Channels")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("Candidate limit"), {
@@ -89,7 +89,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
       body: JSON.stringify({
         job_id: "job_1",
         query: "Search configured from the JD",
-        channels: ["linkedin", "github", "exa"],
+        channels: ["linkedin", "github", "exa", "brightdata_discover"],
         params: { limit: 2 }
       })
     })
@@ -142,7 +142,11 @@ it("shows the active search channels while a search is running", async () => {
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Create search run" }));
-  expect(await screen.findByText("Running sourcing search on LinkedIn + GitHub + Exa...")).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      "Running sourcing search on LinkedIn + GitHub + Exa + Bright Data Discover..."
+    )
+  ).toBeInTheDocument();
 
   resolveSearch(
     await jsonResponse({
@@ -206,7 +210,7 @@ const job: Job = {
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "Search configured from the JD",
-  search_channels: ["linkedin", "github", "exa"],
+  search_channels: ["linkedin", "github", "exa", "brightdata_discover"],
   created_at: "2026-04-28T12:00:00Z",
   updated_at: "2026-04-28T12:00:00Z"
 };

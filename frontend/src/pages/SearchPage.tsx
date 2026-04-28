@@ -8,7 +8,8 @@ const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
   { value: "github", label: "GitHub" },
   { value: "openreview", label: "OpenReview" },
   { value: "arxiv", label: "arXiv" },
-  { value: "exa", label: "Exa" }
+  { value: "exa", label: "Exa" },
+  { value: "brightdata_discover", label: "Bright Data Discover" }
 ];
 
 type SearchPageProps = {

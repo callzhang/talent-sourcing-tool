@@ -268,6 +268,9 @@ function inferSourceType(url: string | null): string {
   if (url.includes("exa.ai")) {
     return "exa";
   }
+  if (url.includes("brightdata.com")) {
+    return "brightdata_discover";
+  }
   return "source";
 }
 
@@ -278,6 +281,7 @@ function formatSourceLabel(sourceType: string, title: string): string {
     openreview: "OpenReview",
     arxiv: "arXiv",
     exa: "Exa",
+    brightdata_discover: "Bright Data Discover",
     source: "Source"
   };
   return `${labels[sourceType] ?? sourceType}: ${title}`;

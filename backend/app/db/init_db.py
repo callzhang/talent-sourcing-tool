@@ -5,7 +5,7 @@ from sqlmodel import SQLModel
 
 from app.db import models  # noqa: F401
 from app.db.session import engine
-from app.services.sourcing import default_job_search_channels
+from app.services.sourcing import default_job_search_channels, normalize_search_channels
 
 
 def init_db() -> None:
@@ -55,15 +55,21 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
             text("SELECT id, title, description, search_channels FROM job")
         ).all()
         for job_id, title, description, search_channels in existing_jobs:
-            if search_channels not in (None, "", "[]"):
-                continue
+            parsed_channels = (
+                json.loads(search_channels)
+                if isinstance(search_channels, str) and search_channels
+                else search_channels
+            )
+            normalized_channels = normalize_search_channels(parsed_channels)
+            if "brightdata_discover" not in normalized_channels:
+                normalized_channels.append("brightdata_discover")
+            if not normalized_channels:
+                normalized_channels = default_job_search_channels(title, description)
             connection.execute(
                 text("UPDATE job SET search_channels = :search_channels WHERE id = :job_id"),
                 {
                     "job_id": job_id,
-                    "search_channels": (
-                        '["' + '","'.join(default_job_search_channels(title, description)) + '"]'
-                    ),
+                    "search_channels": json.dumps(normalized_channels),
                 },
             )
         if {"searchrun", "job"}.issubset(existing_tables):
@@ -86,16 +92,20 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
                 )
                 if not isinstance(metadata, dict):
                     metadata = {}
-                if metadata.get("channels"):
-                    continue
                 channels = (
-                    json.loads(job_search_channels)
-                    if isinstance(job_search_channels, str) and job_search_channels
-                    else job_search_channels
+                    normalize_search_channels(metadata.get("channels"))
+                    or (
+                        json.loads(job_search_channels)
+                        if isinstance(job_search_channels, str) and job_search_channels
+                        else job_search_channels
+                    )
                 )
-                metadata["channels"] = channels or default_job_search_channels(
-                    job_title, job_description
-                )
+                channels = normalize_search_channels(channels)
+                if "brightdata_discover" not in channels:
+                    channels.append("brightdata_discover")
+                if not channels:
+                    channels = default_job_search_channels(job_title, job_description)
+                metadata["channels"] = channels
                 connection.execute(
                     text("UPDATE searchrun SET metadata = :metadata WHERE id = :search_run_id"),
                     {"search_run_id": search_run_id, "metadata": json.dumps(metadata)},

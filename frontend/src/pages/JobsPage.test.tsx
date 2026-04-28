@@ -68,7 +68,7 @@ it("shows the selected JD details and rubric evidence fields", async () => {
   expect(screen.getByText("AI-native builder")).toBeInTheDocument();
   expect(screen.getByText("No shipping evidence")).toBeInTheDocument();
   expect(screen.getByText("Search for prototype builders")).toBeInTheDocument();
-  expect(screen.getByText("LinkedIn, GitHub, Exa")).toBeInTheDocument();
+  expect(screen.getByText("LinkedIn, GitHub, Exa, Bright Data Discover")).toBeInTheDocument();
   expect(screen.getByText("Matches the role context, domain, and target profile.")).toBeInTheDocument();
   expect(screen.getByText("Evidence of customer-facing prototypes.")).toBeInTheDocument();
   expect(screen.getByText("Only internal tooling.")).toBeInTheDocument();
@@ -228,7 +228,7 @@ const job = {
   target_profile_text: "",
   red_flags_text: "",
   search_notes: "",
-  search_channels: ["linkedin", "github", "exa"],
+  search_channels: ["linkedin", "github", "exa", "brightdata_discover"],
   created_at: "2026-04-28T12:00:00Z",
   updated_at: "2026-04-28T12:00:00Z"
 };

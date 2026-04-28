@@ -12,7 +12,13 @@ export type Job = {
   updated_at: ISODateString;
 };
 
-export type SearchChannel = "linkedin" | "github" | "openreview" | "arxiv" | "exa";
+export type SearchChannel =
+  | "linkedin"
+  | "github"
+  | "openreview"
+  | "arxiv"
+  | "exa"
+  | "brightdata_discover";
 
 export type RubricDimension = {
   name: string;
