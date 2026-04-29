@@ -182,7 +182,8 @@ const searchRunResult = {
   candidates: [
     {
       id: "candidate_1",
-      linkedin_url: "https://www.linkedin.com/in/searched",
+      profile_url: "https://www.linkedin.com/in/searched",
+      profile_source: "linkedin",
       name: "Searched Candidate",
       headline: "AI PMM",
       location: "Remote",

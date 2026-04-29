@@ -3,8 +3,6 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -14,6 +12,8 @@ from app.db.session import get_session
 from app.schemas import CandidateRead, SearchCreate, SearchRunDetail, SearchRunRead
 from app.services.sourcing import (
     CandidateSourceResult,
+    SourcingConfigError,
+    canonical_profile_url,
     default_job_search_channels,
     get_sourcing_connector,
     normalize_search_channels,
@@ -38,18 +38,11 @@ def json_safe_value(value: Any) -> Any:
     return str(value)
 
 
-def canonical_linkedin_url(linkedin_url: str) -> str:
-    parsed = urlsplit(linkedin_url.strip())
-    scheme = (parsed.scheme or "https").lower()
-    netloc = parsed.netloc.lower()
-    path = parsed.path.rstrip("/")
-    return urlunsplit((scheme, netloc, path, "", ""))
-
-
 def candidate_payload(result: CandidateSourceResult) -> dict[str, Any]:
     return json_safe_value(
         {
-            "linkedin_url": canonical_linkedin_url(result.linkedin_url),
+            "profile_url": canonical_profile_url(result.profile_url),
+            "profile_source": result.profile_source,
             "name": result.name,
             "headline": result.headline,
             "location": result.location,
@@ -61,7 +54,8 @@ def candidate_payload(result: CandidateSourceResult) -> dict[str, Any]:
 
 def normalize_result(result: CandidateSourceResult) -> CandidateSourceResult:
     return CandidateSourceResult(
-        linkedin_url=canonical_linkedin_url(result.linkedin_url),
+        profile_url=canonical_profile_url(result.profile_url),
+        profile_source=result.profile_source,
         name=result.name,
         headline=result.headline,
         location=result.location,
@@ -76,9 +70,9 @@ def dedupe_results(results: list[CandidateSourceResult]) -> list[CandidateSource
     seen_urls: set[str] = set()
     for result in results:
         normalized = normalize_result(result)
-        if normalized.linkedin_url in seen_urls:
+        if normalized.profile_url in seen_urls:
             continue
-        seen_urls.add(normalized.linkedin_url)
+        seen_urls.add(normalized.profile_url)
         deduped.append(normalized)
     return deduped
 
@@ -99,6 +93,7 @@ def mark_search_failed(session: Session, search_run_id: str, error_message: str)
 
 
 def update_candidate(candidate: Candidate, result: CandidateSourceResult) -> Candidate:
+    candidate.profile_source = result.profile_source
     candidate.name = result.name
     candidate.headline = result.headline
     candidate.location = result.location
@@ -113,11 +108,12 @@ def update_candidate(candidate: Candidate, result: CandidateSourceResult) -> Can
 
 def upsert_candidate(session: Session, result: CandidateSourceResult) -> Candidate:
     candidate = session.exec(
-        select(Candidate).where(Candidate.linkedin_url == result.linkedin_url)
+        select(Candidate).where(Candidate.profile_url == result.profile_url)
     ).first()
     if candidate is None:
         candidate = Candidate(
-            linkedin_url=result.linkedin_url,
+            profile_url=result.profile_url,
+            profile_source=result.profile_source,
             name=result.name,
             headline=result.headline,
             location=result.location,
@@ -133,7 +129,7 @@ def upsert_candidate(session: Session, result: CandidateSourceResult) -> Candida
                 session.flush()
         except IntegrityError:
             candidate = session.exec(
-                select(Candidate).where(Candidate.linkedin_url == result.linkedin_url)
+                select(Candidate).where(Candidate.profile_url == result.profile_url)
             ).one()
             update_candidate(candidate, result)
             session.add(candidate)
@@ -263,7 +259,7 @@ def create_search(
                 SearchResult(
                     search_run_id=search_run.id,
                     candidate_id=candidate.id,
-                    linkedin_url=result.linkedin_url,
+                    profile_url=result.profile_url,
                     title=result.current_title,
                     snippet=result.headline,
                     rank=rank,
@@ -278,7 +274,7 @@ def create_search(
         search_run.completed_at = datetime.now(UTC)
         session.add(search_run)
         session.commit()
-    except Exception as exc:
+    except (SourcingConfigError, Exception) as exc:
         mark_search_failed(session, search_run.id, str(exc))
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

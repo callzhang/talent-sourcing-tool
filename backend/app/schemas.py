@@ -58,7 +58,8 @@ class CandidateRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    linkedin_url: str
+    profile_url: str
+    profile_source: str
     name: str
     headline: str | None = None
     location: str | None = None

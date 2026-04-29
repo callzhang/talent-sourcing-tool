@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, JSON
+from sqlalchemy import Column, JSON, String
 from sqlmodel import Field, SQLModel
 
 
@@ -99,7 +99,8 @@ class SearchRun(SQLModel, table=True):
 
 class Candidate(SQLModel, table=True):
     id: str = Field(default_factory=candidate_id, primary_key=True)
-    linkedin_url: str = Field(unique=True, index=True)
+    profile_url: str = Field(sa_column=Column("linkedin_url", String, unique=True, index=True))
+    profile_source: str = Field(default="linkedin", index=True)
     name: str
     headline: str | None = None
     location: str | None = None
@@ -113,7 +114,7 @@ class SearchResult(SQLModel, table=True):
     id: str = Field(default_factory=search_result_id, primary_key=True)
     search_run_id: str = Field(foreign_key="searchrun.id", index=True)
     candidate_id: str | None = Field(default=None, foreign_key="candidate.id", index=True)
-    linkedin_url: str = Field(index=True)
+    profile_url: str = Field(sa_column=Column("linkedin_url", String, index=True))
     title: str | None = None
     snippet: str | None = None
     rank: int | None = None

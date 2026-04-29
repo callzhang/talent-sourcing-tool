@@ -166,8 +166,8 @@ function CandidateDetail({
       <p className="muted">
         {[candidate.current_company, candidate.location].filter(Boolean).join(" · ")}
       </p>
-      <a href={candidate.linkedin_url} target="_blank" rel="noreferrer">
-        LinkedIn profile
+      <a href={candidate.profile_url} target="_blank" rel="noreferrer">
+        Open {sourceLabel(candidate.profile_source)} profile
       </a>
       <EvidenceList label="Signals" items={signals} />
       <EvidenceList label="Risks" items={risks} />
@@ -247,6 +247,19 @@ function sourceList(value: unknown): Array<{ title: string; url: string }> {
       ? [{ title: formatSourceLabel(sourceType, title), url }]
       : [];
   });
+}
+
+function sourceLabel(value: string): string {
+  return (
+    {
+      linkedin: "LinkedIn",
+      github: "GitHub",
+      openreview: "OpenReview",
+      arxiv: "arXiv",
+      exa: "Exa",
+      brightdata_discover: "Bright Data Discover"
+    }[value] ?? "candidate"
+  );
 }
 
 function inferSourceType(url: string | null): string {

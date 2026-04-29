@@ -46,7 +46,7 @@ def test_latest_search_result_ignores_missing_search_run():
                 SearchResult(
                     search_run_id="search_run_missing",
                     candidate_id="candidate_1",
-                    linkedin_url="https://www.linkedin.com/in/one",
+                    profile_url="https://www.linkedin.com/in/one",
                     rank=1,
                     raw_data={},
                 )
@@ -70,7 +70,7 @@ def test_get_candidate_returns_candidate_detail(client: TestClient, engine: Engi
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == candidate_id
-    assert data["linkedin_url"] == "https://www.linkedin.com/in/searched"
+    assert data["profile_url"] == "https://www.linkedin.com/in/searched"
     assert data["last_search_query"] == "AI product marketer"
 
 
@@ -85,7 +85,7 @@ def seed_candidates(engine: Engine) -> tuple[str, str, str]:
     with Session(engine) as session:
         job = Job(title="PMM", description="Product marketing")
         searched_candidate = Candidate(
-            linkedin_url="https://www.linkedin.com/in/searched",
+            profile_url="https://www.linkedin.com/in/searched",
             name="Searched Candidate",
             headline="AI PMM",
             location="Remote",
@@ -93,7 +93,7 @@ def seed_candidates(engine: Engine) -> tuple[str, str, str]:
             profile_data={"current_title": "PMM"},
         )
         unsearched_candidate = Candidate(
-            linkedin_url="https://www.linkedin.com/in/unsearched",
+            profile_url="https://www.linkedin.com/in/unsearched",
             name="Unsearched Candidate",
             profile_data={},
         )
@@ -118,7 +118,7 @@ def seed_candidates(engine: Engine) -> tuple[str, str, str]:
             SearchResult(
                 search_run_id=search_run.id,
                 candidate_id=searched_candidate.id,
-                linkedin_url=searched_candidate.linkedin_url,
+                profile_url=searched_candidate.profile_url,
                 title="PMM",
                 snippet="AI PMM",
                 rank=1,

@@ -286,8 +286,8 @@ export function CandidateDetailPage({
         <p className="muted">
           {[loadedCandidate.current_company, loadedCandidate.location].filter(Boolean).join(" · ")}
         </p>
-        <a href={loadedCandidate.linkedin_url} target="_blank" rel="noreferrer">
-          Open LinkedIn profile
+        <a href={loadedCandidate.profile_url} target="_blank" rel="noreferrer">
+          Open {profileSourceLabel(loadedCandidate.profile_source)} profile
         </a>
         <button
           type="button"
@@ -338,6 +338,19 @@ export function CandidateDetailPage({
         </div>
       </form>
     </section>
+  );
+}
+
+function profileSourceLabel(value: string): string {
+  return (
+    {
+      linkedin: "LinkedIn",
+      github: "GitHub",
+      openreview: "OpenReview",
+      arxiv: "arXiv",
+      exa: "Exa",
+      brightdata_discover: "Bright Data Discover"
+    }[value] ?? "candidate"
   );
 }
 

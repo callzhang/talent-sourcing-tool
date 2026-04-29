@@ -20,14 +20,14 @@ def in_memory_engine():
     return engine
 
 
-def test_candidate_linkedin_url_is_unique():
+def test_candidate_profile_url_is_unique():
     engine = in_memory_engine()
 
     with Session(engine) as session:
-        session.add(Candidate(linkedin_url="https://www.linkedin.com/in/example", name="A"))
+        session.add(Candidate(profile_url="https://www.linkedin.com/in/example", name="A"))
         session.commit()
 
-        session.add(Candidate(linkedin_url="https://www.linkedin.com/in/example", name="B"))
+        session.add(Candidate(profile_url="https://www.linkedin.com/in/example", name="B"))
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
@@ -42,7 +42,7 @@ def test_pass_reason_links_to_job_and_candidate_decision():
 
     with Session(engine) as session:
         job = Job(title="AI Product Engineer", description="Build AI prototypes")
-        candidate = Candidate(linkedin_url="https://www.linkedin.com/in/example", name="A")
+        candidate = Candidate(profile_url="https://www.linkedin.com/in/example", name="A")
         session.add(job)
         session.add(candidate)
         session.commit()
@@ -165,6 +165,23 @@ def test_migrate_existing_sqlite_schema_adds_job_profile_columns(tmp_path: Path)
                 """
             )
         )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE candidate (
+                    id VARCHAR NOT NULL PRIMARY KEY,
+                    linkedin_url VARCHAR NOT NULL,
+                    name VARCHAR NOT NULL,
+                    headline VARCHAR,
+                    location VARCHAR,
+                    current_company VARCHAR,
+                    profile_data JSON NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+        )
 
     migrate_existing_sqlite_schema(engine)
 
@@ -175,11 +192,15 @@ def test_migrate_existing_sqlite_schema_adds_job_profile_columns(tmp_path: Path)
         review_job_columns = {
             row[1] for row in connection.execute(text("PRAGMA table_info(reviewjob)")).all()
         }
+        candidate_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(candidate)")).all()
+        }
 
     assert {"region", "target_profile_text", "red_flags_text", "search_notes", "search_channels"}.issubset(
         job_columns
     )
     assert {"input_path", "output_path"}.issubset(review_job_columns)
+    assert {"profile_source"}.issubset(candidate_columns)
 
 
 def test_migrate_existing_sqlite_schema_is_idempotent(tmp_path: Path):

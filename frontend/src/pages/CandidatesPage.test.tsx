@@ -220,7 +220,8 @@ const pmmJob: Job = {
 
 const candidate: Candidate = {
   id: "candidate_1",
-  linkedin_url: "https://www.linkedin.com/in/one",
+  profile_url: "https://www.linkedin.com/in/one",
+  profile_source: "linkedin",
   name: "Candidate One",
   headline: null,
   location: "Remote",

@@ -258,7 +258,8 @@ it("ignores a stale in-flight draft after the candidate changes", async () => {
 
 const candidateOne: Candidate = {
   id: "candidate_1",
-  linkedin_url: "https://www.linkedin.com/in/one",
+  profile_url: "https://www.linkedin.com/in/one",
+  profile_source: "linkedin",
   name: "Candidate One",
   headline: "AI PMM",
   location: "Remote",
@@ -271,7 +272,7 @@ const candidateOne: Candidate = {
 const candidateTwo: Candidate = {
   ...candidateOne,
   id: "candidate_2",
-  linkedin_url: "https://www.linkedin.com/in/two",
+  profile_url: "https://www.linkedin.com/in/two",
   name: "Candidate Two"
 };
 

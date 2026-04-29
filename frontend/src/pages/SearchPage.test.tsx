@@ -219,7 +219,8 @@ const job: Job = {
 
 const candidate: Candidate = {
   id: "candidate_1",
-  linkedin_url: "https://www.linkedin.com/in/new",
+  profile_url: "https://www.linkedin.com/in/new",
+  profile_source: "linkedin",
   name: "New Candidate",
   headline: "AI builder",
   location: "San Francisco",

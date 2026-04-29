@@ -85,7 +85,7 @@ export function App() {
           <p className="eyebrow">Local sourcing workspace</p>
           <h1>Talent Sourcing Tool</h1>
           <p className="hero-copy">
-            JD to LinkedIn sourcing to AI review to pass/proceed feedback loop.
+            JD to multi-channel sourcing to AI review to pass/proceed feedback loop.
           </p>
         </div>
       </header>

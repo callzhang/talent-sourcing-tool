@@ -35,6 +35,28 @@ def client(engine: Engine) -> Generator[TestClient, None, None]:
     app.state.create_tables_on_startup = True
 
 
+@pytest.fixture(autouse=True)
+def stub_sourcing_connector(monkeypatch: pytest.MonkeyPatch):
+    class StubConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            return [
+                CandidateSourceResult(
+                    profile_url="https://www.linkedin.com/in/searched",
+                    profile_source="linkedin",
+                    name="Searched Candidate",
+                    headline="Founding PMM for AI startup",
+                    location="San Francisco, CA",
+                    current_company="ExampleCo",
+                    current_title="Founding PMM",
+                    raw={"query": query, "params": params},
+                )
+            ]
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: StubConnector())
+
+
 def create_job(client: TestClient) -> str:
     response = client.post(
         "/api/jobs",
@@ -44,7 +66,7 @@ def create_job(client: TestClient) -> str:
     return str(response.json()["job"]["id"])
 
 
-def test_search_upserts_candidates_by_linkedin_url(client: TestClient, engine: Engine):
+def test_search_upserts_candidates_by_profile_url(client: TestClient, engine: Engine):
     job_id = create_job(client)
 
     response = client.post(
@@ -60,7 +82,7 @@ def test_search_upserts_candidates_by_linkedin_url(client: TestClient, engine: E
     data = response.json()
     assert data["status"] == "completed"
     assert len(data["candidates"]) == 1
-    assert data["candidates"][0]["linkedin_url"].startswith("https://www.linkedin.com/in/")
+    assert data["candidates"][0]["profile_url"].startswith("https://www.linkedin.com/in/")
 
     repeat_response = client.post(
         "/api/search",
@@ -77,7 +99,7 @@ def test_search_upserts_candidates_by_linkedin_url(client: TestClient, engine: E
     assert len(candidates) == 1
 
 
-def test_search_returns_ai_product_engineer_fixture_set(client: TestClient):
+def test_search_persists_connector_candidate_payload(client: TestClient):
     job_id = create_job(client)
 
     response = client.post(
@@ -92,11 +114,11 @@ def test_search_returns_ai_product_engineer_fixture_set(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert len(data["candidates"]) == 1
-    assert data["candidates"][0]["name"] == "Alex Rivera"
+    assert data["candidates"][0]["name"] == "Searched Candidate"
     assert data["candidates"][0]["location"] == "San Francisco, CA"
-    assert data["candidates"][0]["profile_data"]["raw"]["target_role"] == "AI Product Engineer"
-    assert data["candidates"][0]["profile_data"]["raw"]["signals"]
-    assert data["candidates"][0]["profile_data"]["raw"]["risks"] == []
+    assert data["candidates"][0]["profile_data"]["raw"]["query"] == (
+        "AI Product Engineer prototype builder vibe coding"
+    )
 
 
 def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: TestClient):
@@ -212,6 +234,29 @@ def test_search_returns_404_when_job_does_not_exist(client: TestClient):
     assert response.status_code == 404
 
 
+def test_search_requires_real_config_for_linkedin_channel(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+    from app.api import search
+    from app.services.sourcing import LiveSourcingConnector
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: LiveSourcingConnector())
+
+    response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "founding PMM AI startup",
+            "channels": ["linkedin"],
+            "params": {"limit": 2},
+        },
+    )
+
+    assert response.status_code == 502
+    assert "linkedin channel requires" in response.json()["detail"].casefold()
+
+
 def test_search_marks_run_failed_when_connector_raises(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
 ):
@@ -242,7 +287,7 @@ def test_search_marks_run_failed_when_connector_raises(
     assert search_run.run_metadata["error_message"] == "connector unavailable"
 
 
-def test_search_deduplicates_connector_results_by_canonical_linkedin_url(
+def test_search_deduplicates_connector_results_by_canonical_profile_url(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
 ):
     job_id = create_job(client)
@@ -251,7 +296,8 @@ def test_search_deduplicates_connector_results_by_canonical_linkedin_url(
         def search_people(self, query, params):  # noqa: ANN001, ANN202
             return [
                 CandidateSourceResult(
-                    linkedin_url="https://www.linkedin.com/in/example-profile/",
+                    profile_url="https://www.linkedin.com/in/example-profile/",
+                    profile_source="linkedin",
                     name="Example Person",
                     headline="Founding PMM",
                     location="Remote",
@@ -260,7 +306,8 @@ def test_search_deduplicates_connector_results_by_canonical_linkedin_url(
                     raw={"rank": 1},
                 ),
                 CandidateSourceResult(
-                    linkedin_url="https://www.linkedin.com/in/example-profile?trk=people",
+                    profile_url="https://www.linkedin.com/in/example-profile?trk=people",
+                    profile_source="linkedin",
                     name="Example Person Duplicate",
                     headline="Duplicate result",
                     location="Remote",
@@ -282,7 +329,7 @@ def test_search_deduplicates_connector_results_by_canonical_linkedin_url(
     assert response.status_code == 200
     data = response.json()
     assert len(data["candidates"]) == 1
-    assert data["candidates"][0]["linkedin_url"] == (
+    assert data["candidates"][0]["profile_url"] == (
         "https://www.linkedin.com/in/example-profile"
     )
 
@@ -302,7 +349,8 @@ def test_search_stores_json_unsafe_raw_payload_safely(
         def search_people(self, query, params):  # noqa: ANN001, ANN202
             return [
                 CandidateSourceResult(
-                    linkedin_url="https://www.linkedin.com/in/json-unsafe",
+                    profile_url="https://www.linkedin.com/in/json-unsafe",
+                    profile_source="linkedin",
                     name="JSON Unsafe",
                     headline="Has unsafe raw payload",
                     location="Remote",
@@ -388,6 +436,12 @@ def test_json_safe_value_converts_unknown_objects_to_string():
     assert json_safe_value({"value": UnknownValue()}) == {"value": "unknown-value"}
 
 
+def test_github_location_query_uses_city_only():
+    from app.services.sourcing import github_location_query
+
+    assert github_location_query("San Francisco, CA") == "San Francisco"
+
+
 def test_candidate_race_recovery_preserves_prior_search_results(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ):
@@ -397,7 +451,7 @@ def test_candidate_race_recovery_preserves_prior_search_results(
 
     with Session(engine) as session:
         job = Job(title="Founding PMM", description="Find PMF wedge")
-        existing_candidate = Candidate(linkedin_url=race_url, name="Existing Candidate")
+        existing_candidate = Candidate(profile_url=race_url, name="Existing Candidate")
         session.add(job)
         session.add(existing_candidate)
         session.commit()
@@ -415,7 +469,7 @@ def test_candidate_race_recovery_preserves_prior_search_results(
         search_run_id = search_run.id
 
         prior_candidate = Candidate(
-            linkedin_url="https://www.linkedin.com/in/prior-candidate",
+            profile_url="https://www.linkedin.com/in/prior-candidate",
             name="Prior Candidate",
         )
         session.add(prior_candidate)
@@ -424,7 +478,7 @@ def test_candidate_race_recovery_preserves_prior_search_results(
             SearchResult(
                 search_run_id=search_run_id,
                 candidate_id=prior_candidate.id,
-                linkedin_url=prior_candidate.linkedin_url,
+                profile_url=prior_candidate.profile_url,
                 rank=1,
                 raw_data={"raw": {"rank": 1}},
             )
@@ -449,7 +503,8 @@ def test_candidate_race_recovery_preserves_prior_search_results(
         candidate = search.upsert_candidate(
             session,
             CandidateSourceResult(
-                linkedin_url=race_url,
+                profile_url=race_url,
+                profile_source="linkedin",
                 name="Race Candidate",
                 headline="Updated headline",
                 location="Remote",
@@ -462,7 +517,7 @@ def test_candidate_race_recovery_preserves_prior_search_results(
             SearchResult(
                 search_run_id=search_run_id,
                 candidate_id=candidate.id,
-                linkedin_url=candidate.linkedin_url,
+                profile_url=candidate.profile_url,
                 rank=2,
                 raw_data={"raw": {"rank": 2}},
             )
@@ -475,3 +530,39 @@ def test_candidate_race_recovery_preserves_prior_search_results(
         ).all()
 
     assert len(search_results) == 2
+
+
+def test_search_result_payload_uses_profile_url_not_linkedin_url(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    class GitHubConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            return [
+                CandidateSourceResult(
+                    profile_url="https://github.com/example-user",
+                    profile_source="github",
+                    name="Example User",
+                    headline="Builder",
+                    location="San Francisco, CA",
+                    current_company="ExampleCo",
+                    current_title="PMM",
+                    raw={"rank": 1},
+                )
+            ]
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: GitHubConnector())
+
+    response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "example user", "channels": ["github"]},
+    )
+
+    assert response.status_code == 200
+    candidate = response.json()["candidates"][0]
+    assert candidate["profile_url"] == "https://github.com/example-user"
+    assert candidate["profile_source"] == "github"
+    assert "linkedin_url" not in candidate

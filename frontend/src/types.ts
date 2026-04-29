@@ -58,7 +58,8 @@ export type CandidateProfileData = Record<string, unknown> & {
 
 export type Candidate = {
   id: string;
-  linkedin_url: string;
+  profile_url: string;
+  profile_source: SearchChannel | string;
   name: string;
   headline: string | null;
   location: string | null;

@@ -30,6 +30,9 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
             "input_path": "VARCHAR",
             "output_path": "VARCHAR",
         },
+        "candidate": {
+            "profile_source": "TEXT NOT NULL DEFAULT 'linkedin'",
+        },
     }
     with db_engine.begin() as connection:
         existing_tables = {
@@ -118,6 +121,12 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
                     text("UPDATE searchrun SET metadata = :metadata WHERE id = :search_run_id"),
                     {"search_run_id": search_run_id, "metadata": json.dumps(metadata)},
                 )
+        if "candidate" in existing_tables:
+            connection.execute(
+                text(
+                    "UPDATE candidate SET profile_source = COALESCE(NULLIF(profile_source, ''), 'linkedin')"
+                )
+            )
 
 
 if __name__ == "__main__":

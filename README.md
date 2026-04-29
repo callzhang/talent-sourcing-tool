@@ -1,6 +1,6 @@
 # Talent Sourcing Tool
 
-Local-first MVP for JD management, LinkedIn sourcing, Codex-based candidate review, and pass-reason-driven sourcing refinement.
+Local-first MVP for JD management, multi-channel candidate sourcing, Codex-based candidate review, and pass-reason-driven sourcing refinement.
 
 This repository is intentionally local-first. It does not include auth, deployment, outreach automation, or multi-user workflow support.
 
@@ -8,7 +8,7 @@ This repository is intentionally local-first. It does not include auth, deployme
 
 - `backend/` is a FastAPI API that owns all persistent writes.
 - `frontend/` is a React/Vite UI that talks to the backend at `http://localhost:8000` by default.
-- Candidate sourcing is behind a Bright Data adapter boundary. The current implementation uses a mock connector with the same normalized result shape expected from a real Bright Data-backed connector.
+- Candidate sourcing runs through a live channel router. Public channels use direct HTTP APIs, and private channels use configured provider credentials.
 - Candidate review is behind a local Codex file-protocol worker. The backend writes `input.json`, runs the configured Codex command in an isolated workspace with a temporary `HOME`, validates `review.json`, then stores the result.
 - Persistence uses a SQLModel/SQLAlchemy database URL. The default is local SQLite, and the schema is intended to remain Turso/libSQL-compatible for the MVP.
 
@@ -21,7 +21,7 @@ This repository is intentionally local-first. It does not include auth, deployme
 
 ## Environment
 
-Backend settings use the `TALENT_` prefix and can be defined in `backend/.env`.
+Backend settings use the `TALENT_` prefix and can be defined in `backend/.env`. The backend also reads the repository root `.env`, which is useful when frontend and backend share sourcing credentials locally.
 
 ```bash
 cd backend
@@ -33,6 +33,10 @@ Available settings:
 - `TALENT_DATABASE_URL`: SQLAlchemy-compatible database URL. Defaults to `sqlite:///./talent_sourcing.sqlite3` in `backend/`.
 - `TALENT_CODEX_BINARY`: Codex executable used by the review worker. Defaults to `codex`.
 - `TALENT_REVIEW_WORKSPACE_ROOT`: local directory for generated review workspaces. Defaults to `.codex-review-runs`.
+- `TALENT_SOURCING_PROVIDER`: sourcing execution mode. The current supported value is `live`.
+- `TALENT_EXA_API_KEY`: required for the `exa` channel and for `linkedin` when Exa is the retrieval backend.
+- `TALENT_BRIGHTDATA_API_KEY`: required for `brightdata_discover` and for `linkedin` when Bright Data SERP is the retrieval backend.
+- `TALENT_BRIGHTDATA_ZONE`: Bright Data SERP zone name required together with `TALENT_BRIGHTDATA_API_KEY`.
 
 Frontend settings can be defined in `frontend/.env.local`.
 
@@ -79,19 +83,18 @@ For options:
 bash scripts/dev.sh --help
 ```
 
-## Bright Data Adapter Boundary
+## Sourcing Channels
 
-The app calls `get_sourcing_connector()` in `backend/app/services/sourcing.py`. The MVP ships with `MockBrightDataConnector`, which returns deterministic candidate fixtures while preserving the normalized fields and raw provider payload shape:
+The app calls `get_sourcing_connector()` in `backend/app/services/sourcing.py`. The current implementation is live-only and routes each selected search channel separately:
 
-- LinkedIn URL
-- name
-- headline
-- location
-- current company
-- current title
-- raw provider metadata
+- `github`: GitHub user search API plus per-user profile lookup
+- `openreview`: OpenReview notes search API
+- `arxiv`: arXiv Atom API
+- `exa`: Exa Search API
+- `linkedin`: Exa domain search or Bright Data SERP, depending on which credential is configured
+- `brightdata_discover`: Bright Data SERP API
 
-A real Bright Data integration should implement the same `SourcingConnector.search_people(query, params)` protocol and keep provider-specific response details inside `raw`. Candidate identity remains the LinkedIn profile URL, and the backend remains responsible for deduplication and database writes.
+Candidate identity is now a generic `profile_url` plus `profile_source`, not a LinkedIn-only URL. Provider-specific response details remain under each candidate's `profile_data.raw` payload.
 
 ## Codex Review Worker
 
@@ -143,6 +146,6 @@ bash scripts/dev.sh --help
 - No authentication, authorization, or deployment setup.
 - No ATS pipeline beyond `pass` and `proceed`.
 - No automated outreach or email/calendar integration.
-- Bright Data is represented by a mock adapter until a real connector is configured.
-- LinkedIn and browser-based enrichment reliability are outside the app's guarantees.
+- LinkedIn search requires either Exa or Bright Data SERP credentials; there is no unauthenticated LinkedIn search path.
+- `brightdata_discover` requires both a Bright Data API key and a SERP zone.
 - Codex review quality depends on the local Codex CLI, local session capabilities, and the evidence available to the worker.

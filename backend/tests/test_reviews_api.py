@@ -46,7 +46,7 @@ def seed_review_inputs(engine: Engine) -> tuple[str, str]:
     with Session(engine) as session:
         job = Job(title="AI Product Engineer", description="Build AI prototypes")
         candidate = Candidate(
-            linkedin_url="https://www.linkedin.com/in/example",
+            profile_url="https://www.linkedin.com/in/example",
             name="Example Candidate",
             profile_data={"current_title": "Founding Engineer"},
         )
@@ -297,7 +297,7 @@ def test_review_helpers_cover_defensive_paths(engine: Engine):
 
         job = Job(title="AI Product Engineer", description="Build demos")
         candidate = Candidate(
-            linkedin_url="https://www.linkedin.com/in/helper",
+            profile_url="https://www.linkedin.com/in/helper",
             name="Helper Candidate",
             profile_data={},
         )
@@ -641,7 +641,7 @@ def test_pass_decision_dedupes_pending_refinement_suggestions(
     job_id, candidate_id = seed_review_inputs(engine)
     with Session(engine) as session:
         candidate = Candidate(
-            linkedin_url="https://www.linkedin.com/in/another",
+            profile_url="https://www.linkedin.com/in/another",
             name="Another Candidate",
             profile_data={},
         )
@@ -791,7 +791,7 @@ def test_decision_rejects_review_owned_by_different_candidate(
     job_id, candidate_id = seed_review_inputs(engine)
     with Session(engine) as session:
         other_candidate = Candidate(
-            linkedin_url="https://www.linkedin.com/in/other-candidate",
+            profile_url="https://www.linkedin.com/in/other-candidate",
             name="Other Candidate",
             profile_data={},
         )
