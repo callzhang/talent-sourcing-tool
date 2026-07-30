@@ -26,6 +26,14 @@ it("loads persisted runs and reports candidates from a new search", async () => 
           channels: ["linkedin", "github", "exa", "brightdata_discover"],
           status: "completed",
           params: { limit: 3, region: "San Francisco, CA" },
+          progress: {
+            worker: 1,
+            stage: "completed",
+            total_channels: 4,
+            completed_channels: 4,
+            active_channel: null,
+            channel_errors: { linkedin: "上游服务不可用" }
+          },
           candidate_count: 3,
           created_at: "2026-04-28T12:00:00Z",
           completed_at: "2026-04-28T12:01:00Z"
@@ -41,6 +49,14 @@ it("loads persisted runs and reports candidates from a new search", async () => 
         channels: ["linkedin", "github", "exa", "brightdata_discover"],
         status: "completed",
         params: { limit: 3, region: "San Francisco, CA" },
+        progress: {
+          worker: 1,
+          stage: "completed",
+          total_channels: 4,
+          completed_channels: 4,
+          active_channel: null,
+          channel_errors: { linkedin: "上游服务不可用" }
+        },
         candidate_count: 1,
         created_at: "2026-04-28T12:00:00Z",
         completed_at: "2026-04-28T12:01:00Z",
@@ -113,6 +129,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   expect(screen.getAllByText("LinkedIn + GitHub + Exa + Bright Data Discover")).toHaveLength(2);
   expect(screen.getAllByText("San Francisco, CA")).toHaveLength(2);
   expect(screen.getAllByText("搜索渠道")).toHaveLength(2);
+  expect(await screen.findByText("LinkedIn 失败：上游服务不可用")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("候选人数量"), {
     target: { value: "2" }

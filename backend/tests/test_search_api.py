@@ -335,6 +335,7 @@ def test_search_marks_run_failed_when_connector_raises(
         json={
             "job_id": job_id,
             "query": "founding PMM AI startup",
+            "channels": ["linkedin"],
             "params": {"limit": 2},
         },
     )
@@ -347,6 +348,54 @@ def test_search_marks_run_failed_when_connector_raises(
         search_run = session.exec(select(SearchRun)).one()
     assert search_run.status == "failed"
     assert search_run.run_metadata["progress"]["error_message"] == "connector unavailable"
+
+
+def test_search_continues_after_a_channel_failure_and_persists_diagnostics(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    class PartiallyFailingConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            channel = params["channels"][0]
+            if channel == "linkedin":
+                raise RuntimeError("LinkedIn upstream unavailable")
+            return [
+                CandidateSourceResult(
+                    profile_url="https://github.com/example/candidate",
+                    profile_source=channel,
+                    name="Searched Candidate",
+                    headline="AI builder",
+                    location="Beijing",
+                    current_company="ExampleCo",
+                    current_title="AI Platform Lead",
+                    raw={"query": query, "channel": channel},
+                )
+            ]
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: PartiallyFailingConnector())
+
+    response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "founding PMM AI startup",
+            "channels": ["linkedin", "github"],
+            "params": {"limit": 2},
+        },
+    )
+
+    response = run_created_search(client, response)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["candidate_count"] == 1
+    assert response.json()["progress"]["completed_channels"] == 2
+    assert response.json()["progress"]["channel_errors"] == {
+        "linkedin": "LinkedIn upstream unavailable"
+    }
 
 
 def test_search_is_blocked_on_vercel_without_durable_storage(

@@ -317,12 +317,30 @@ function RunProgress({ progress = {} }: { progress?: Record<string, unknown> }) 
   const completed = typeof progress.completed_channels === "number" ? progress.completed_channels : 0;
   const total = typeof progress.total_channels === "number" ? progress.total_channels : 0;
   const active = typeof progress.active_channel === "string" ? progress.active_channel : null;
+  const channelErrors = channelErrorsForProgress(progress);
 
   return (
-    <span className="run-progress" aria-label={`执行器 ${worker}；已完成 ${completed}/${total} 个渠道`}>
-      执行器 {worker} · 已完成 {completed}/{total} 个渠道
-      {active ? ` · ${channelLabel(active)}` : ""}
-    </span>
+    <div className="run-progress">
+      <span aria-label={`执行器 ${worker}；已完成 ${completed}/${total} 个渠道`}>
+        执行器 {worker} · 已完成 {completed}/{total} 个渠道
+        {active ? ` · ${channelLabel(active)}` : ""}
+      </span>
+      {channelErrors.map(([channel, error]) => (
+        <span key={channel} className="run-channel-error">
+          {channelLabel(channel)} 失败：{error}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function channelErrorsForProgress(progress: Record<string, unknown>): Array<[string, string]> {
+  const value = progress.channel_errors;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return [];
+  }
+  return Object.entries(value).flatMap(([channel, error]) =>
+    typeof error === "string" && error.length > 0 ? [[channel, error]] : []
   );
 }
 

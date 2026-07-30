@@ -79,7 +79,13 @@ def dedupe_results(results: list[CandidateSourceResult]) -> list[CandidateSource
     return deduped
 
 
-def mark_search_failed(session: Session, search_run_id: str, error_message: str) -> None:
+def mark_search_failed(
+    session: Session,
+    search_run_id: str,
+    error_message: str,
+    *,
+    channel_errors: dict[str, str] | None = None,
+) -> None:
     session.rollback()
     search_run = session.get(SearchRun, search_run_id)
     if search_run is None:
@@ -93,6 +99,7 @@ def mark_search_failed(session: Session, search_run_id: str, error_message: str)
             "stage": "failed",
             "active_channel": None,
             "error_message": error_message,
+            **({"channel_errors": channel_errors} if channel_errors else {}),
         },
     }
     session.add(search_run)
@@ -173,7 +180,17 @@ def update_search_progress(
     stage: str,
     completed_channels: int,
     active_channel: str | None,
+    channel_errors: dict[str, str] | None = None,
 ) -> None:
+    existing_progress = search_run_progress(search_run)
+    persisted_channel_errors = channel_errors
+    if persisted_channel_errors is None:
+        existing_errors = existing_progress.get("channel_errors")
+        persisted_channel_errors = (
+            {str(channel): str(error) for channel, error in existing_errors.items()}
+            if isinstance(existing_errors, dict)
+            else {}
+        )
     search_run.run_metadata = {
         **search_run.run_metadata,
         "progress": {
@@ -182,6 +199,7 @@ def update_search_progress(
             "total_channels": len(search_run_channels(search_run)),
             "completed_channels": completed_channels,
             "active_channel": active_channel,
+            **({"channel_errors": persisted_channel_errors} if persisted_channel_errors else {}),
         },
     }
     session.add(search_run)
@@ -282,6 +300,7 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
     try:
         results: list[CandidateSourceResult] = []
         seen_urls: set[str] = set()
+        channel_errors: dict[str, str] = {}
         limit = max(int(search_run_params(search_run).get("limit", 10)), 1)
         channels = search_run_channels(search_run)
         connector = get_sourcing_connector()
@@ -293,41 +312,59 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
                 completed_channels=index - 1,
                 active_channel=channel,
             )
-            channel_results = connector.search_people(
-                search_run.query,
-                {
-                    **search_run_params(search_run),
-                    "channels": [channel],
-                },
-            )
-            for result in dedupe_results(channel_results):
-                if result.profile_url in seen_urls or len(results) >= limit:
-                    continue
-                seen_urls.add(result.profile_url)
-                candidate = upsert_candidate(session, result)
-                results.append(result)
-                session.add(
-                    SearchResult(
-                        search_run_id=search_run.id,
-                        candidate_id=candidate.id,
-                        profile_url=result.profile_url,
-                        title=result.current_title,
-                        snippet=result.headline,
-                        rank=len(results),
-                        raw_data={
-                            "normalized": candidate_payload(result),
-                            "raw": result.raw,
-                        },
-                    )
+            try:
+                channel_results = connector.search_people(
+                    search_run.query,
+                    {
+                        **search_run_params(search_run),
+                        "channels": [channel],
+                    },
                 )
-                session.commit()
+                for result in dedupe_results(channel_results):
+                    if result.profile_url in seen_urls or len(results) >= limit:
+                        continue
+                    candidate = upsert_candidate(session, result)
+                    seen_urls.add(result.profile_url)
+                    results.append(result)
+                    session.add(
+                        SearchResult(
+                            search_run_id=search_run.id,
+                            candidate_id=candidate.id,
+                            profile_url=result.profile_url,
+                            title=result.current_title,
+                            snippet=result.headline,
+                            rank=len(results),
+                            raw_data={
+                                "normalized": candidate_payload(result),
+                                "raw": result.raw,
+                            },
+                        )
+                    )
+                    session.commit()
+            except Exception as exc:
+                session.rollback()
+                channel_errors[channel] = str(exc)
             update_search_progress(
                 session,
                 search_run,
                 stage="searching",
                 completed_channels=index,
                 active_channel=None,
+                channel_errors=channel_errors,
             )
+
+        if len(channel_errors) == len(channels):
+            failure_summary = next(iter(channel_errors.values()))
+            mark_search_failed(
+                session,
+                search_run.id,
+                failure_summary,
+                channel_errors=channel_errors,
+            )
+            refreshed_search_run = session.get(SearchRun, search_run.id)
+            if refreshed_search_run is None:
+                raise HTTPException(status_code=404, detail="Search run not found")
+            return refreshed_search_run
 
         update_search_progress(
             session,
@@ -335,6 +372,7 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
             stage="completed",
             completed_channels=len(channels),
             active_channel=None,
+            channel_errors=channel_errors,
         )
         search_run.status = "completed"
         search_run.completed_at = datetime.now(UTC)

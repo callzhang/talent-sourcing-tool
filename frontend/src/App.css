@@ -766,9 +766,16 @@ h3 {
 }
 
 .run-progress {
+  display: grid;
+  gap: 4px;
   color: var(--color-text-secondary);
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
+}
+
+.run-channel-error {
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
 }
 
 .rubric-list,
