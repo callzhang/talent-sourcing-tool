@@ -95,8 +95,8 @@ it("renders job listings in the left pane and selected job detail in the right p
     />
   );
 
-  const listingsPane = await screen.findByRole("region", { name: "Job listings" });
-  const detailPane = await screen.findByRole("region", { name: "Job detail" });
+  const listingsPane = await screen.findByRole("region", { name: "岗位列表" });
+  const detailPane = await screen.findByRole("region", { name: "岗位详情" });
 
   expect(listingsPane).toContainElement(screen.getByRole("button", { name: /AI Product Engineer/ }));
   expect(detailPane).toContainElement(screen.getByText("Build customer demos."));
@@ -129,36 +129,36 @@ it("opens a blank form from New Job and saves a new job", async () => {
     />
   );
 
-  fireEvent.click(await screen.findByRole("button", { name: "New Job" }));
-  expect(screen.getByRole("heading", { name: "Job draft" })).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole("button", { name: "新建岗位" }));
+  expect(screen.getByRole("heading", { name: "岗位信息" })).toBeInTheDocument();
   expect(screen.queryByText("Founder-market judgment")).not.toBeInTheDocument();
   const linkedInChannel = screen.getByRole("checkbox", { name: "LinkedIn" });
   expect(linkedInChannel.closest("label")).toHaveClass("checkbox-row");
   expect(linkedInChannel.nextElementSibling).toHaveClass("channel-option-label");
 
-  fireEvent.change(screen.getByLabelText("JD title"), {
+  fireEvent.change(screen.getByLabelText("岗位名称"), {
     target: { value: "AI Product Engineer" }
   });
-  fireEvent.change(screen.getByLabelText("JD description"), {
+  fireEvent.change(screen.getByLabelText("职位描述"), {
     target: { value: "Build customer demos." }
   });
-  fireEvent.change(screen.getByLabelText("Region"), {
+  fireEvent.change(screen.getByLabelText("工作地区"), {
     target: { value: "San Francisco, CA" }
   });
-  fireEvent.change(screen.getByLabelText("Target profile"), {
+  fireEvent.change(screen.getByLabelText("目标画像"), {
     target: { value: "AI-native builder" }
   });
-  fireEvent.change(screen.getByLabelText("Red flags"), {
+  fireEvent.change(screen.getByLabelText("排除条件"), {
     target: { value: "No shipping evidence" }
   });
-  fireEvent.change(screen.getByLabelText("Search notes"), {
+  fireEvent.change(screen.getByLabelText("搜索要点"), {
     target: { value: "Search for prototype builders" }
   });
   fireEvent.click(screen.getByLabelText("OpenReview"));
   fireEvent.click(screen.getByLabelText("arXiv"));
-  fireEvent.click(screen.getByRole("button", { name: "Save Job" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存岗位" }));
 
-  expect(await screen.findByText("JD created and rubric generated.")).toBeInTheDocument();
+  expect(await screen.findByText("岗位和评分标准已创建。")).toBeInTheDocument();
   expect(onCreatedJob).toHaveBeenCalledWith(jobWithRubric);
   expect(screen.getByText("Founder-market judgment")).toBeInTheDocument();
 });
@@ -178,14 +178,14 @@ it("shows API errors from loading and creating jobs", async () => {
 
   expect(await screen.findByText("GET /api/jobs failed with 500: Unable to load jobs.")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "New Job" }));
-  fireEvent.change(screen.getByLabelText("JD title"), {
+  fireEvent.click(screen.getByRole("button", { name: "新建岗位" }));
+  fireEvent.change(screen.getByLabelText("岗位名称"), {
     target: { value: "Broken JD" }
   });
-  fireEvent.change(screen.getByLabelText("JD description"), {
+  fireEvent.change(screen.getByLabelText("职位描述"), {
     target: { value: "Broken description" }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Save Job" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存岗位" }));
 
   expect(await screen.findByText("POST /api/jobs failed with 500: Unable to create JD.")).toBeInTheDocument();
 });
@@ -252,12 +252,12 @@ it("keeps the detail pane empty until New Job is chosen when no job is selected"
     />
   );
 
-  expect(await screen.findByText("No JD selected")).toBeInTheDocument();
-  expect(screen.queryByLabelText("JD title")).not.toBeInTheDocument();
+  expect(await screen.findByText("未选择岗位")).toBeInTheDocument();
+  expect(screen.queryByLabelText("岗位名称")).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "New Job" }));
-  expect(screen.getByLabelText("JD title")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Save Job" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "新建岗位" }));
+  expect(screen.getByLabelText("岗位名称")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "保存岗位" })).toBeInTheDocument();
 });
 
 it("disables job creation in production when durable storage is unavailable", async () => {
@@ -293,8 +293,8 @@ it("disables job creation in production when durable storage is unavailable", as
     />
   );
 
-  expect(await screen.findByText("Job creation is blocked in production until durable database storage is configured.")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "New Job" })).toBeDisabled();
+  expect(await screen.findByText("当前生产环境未配置持久化数据库，无法新建岗位。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "新建岗位" })).toBeDisabled();
 });
 
 const job = {

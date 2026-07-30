@@ -166,7 +166,7 @@ def create_seed_job(session: Session, job_create: JobCreate, normalized_title: s
     session.add(
         Rubric(
             job_id=job.id,
-            name=f"{job.title} Rubric",
+            name=f"{job.title} 评分标准",
             criteria=[rubric_payload],
         )
     )

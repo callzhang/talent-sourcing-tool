@@ -20,8 +20,8 @@ def test_seed_default_jobs_populates_empty_database(tmp_path: Path):
     assert len(jobs) >= 3
     assert {job.title for job in jobs} >= {
         "L5 技术总监",
-        "Founding PMM / PMF Discovery Lead",
-        "AI Product Engineer",
+        "美国市场产品营销与 PMF 探索负责人",
+        "AI 产品工程师",
     }
     assert len(rubrics) >= 3
 
@@ -52,6 +52,6 @@ def test_init_db_seeds_default_jobs_when_creating_schema(monkeypatch, tmp_path: 
 
     assert {job.title for job in jobs} >= {
         "L5 技术总监",
-        "Founding PMM / PMF Discovery Lead",
-        "AI Product Engineer",
+        "美国市场产品营销与 PMF 探索负责人",
+        "AI 产品工程师",
     }

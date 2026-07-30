@@ -56,16 +56,16 @@ it("does not submit a stale candidate while the selected candidate is loading", 
     />
   );
 
-  expect(await screen.findByText("Loaded latest review.")).toBeInTheDocument();
-  expect(screen.getByText("Completed")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Submit proceed" })).toBeEnabled();
+  expect(await screen.findByText("已加载最近一次评审。")).toBeInTheDocument();
+  expect(screen.getByText("已完成")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "确认推进" })).toBeEnabled();
 
   rerender(
     <CandidateDetailPage selectedJobId="job_1" candidate={candidateTwo} onBack={() => undefined} />
   );
 
-  expect(screen.getByText("Loading candidate review context...")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Submit proceed" })).not.toBeInTheDocument();
+  expect(screen.getByText("正在加载候选人评审信息...")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "确认推进" })).not.toBeInTheDocument();
   expect(fetchMock).not.toHaveBeenCalledWith(
     expect.stringContaining("/api/reviews/decision"),
     expect.anything()
@@ -117,11 +117,11 @@ it("ignores a stale in-flight review result after the candidate changes", async 
     />
   );
 
-  expect(await screen.findByText("Ready for AI review.")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Start AI review" }));
-  expect(await screen.findByText("Running AI review...")).toBeInTheDocument();
-  expect(screen.getByText("Running")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Submit proceed" })).toBeDisabled();
+  expect(await screen.findByText("已准备好进行 AI 评审。")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "开始 AI 评审" }));
+  expect(await screen.findByText("正在进行 AI 评审...")).toBeInTheDocument();
+  expect(screen.getByText("进行中")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "确认推进" })).toBeDisabled();
 
   rerender(
     <CandidateDetailPage selectedJobId="job_1" candidate={candidateTwo} onBack={() => undefined} />
@@ -134,9 +134,9 @@ it("ignores a stale in-flight review result after the candidate changes", async 
   });
 
   expect(screen.queryByText("Candidate one review summary.")).not.toBeInTheDocument();
-  expect(screen.getByText("Start an AI review to see score, recommendation, and evidence.")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Draft pass reason" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Submit proceed" })).toBeDisabled();
+  expect(screen.getByText("开始 AI 评审后，可查看评分、建议和证据。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "生成淘汰原因草稿" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "确认推进" })).toBeDisabled();
   expect(decisionPayloads).toHaveLength(0);
 });
 
@@ -147,8 +147,8 @@ it("renders empty state and calls back when no candidate is selected", () => {
     <CandidateDetailPage selectedJobId="job_1" candidate={null} systemStatus={null} onBack={onBack} />
   );
 
-  expect(screen.getByText("Select a searched candidate to review.")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Back to candidates" }));
+  expect(screen.getByText("请选择已搜索到的候选人进行评审。")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "返回候选人" }));
   expect(onBack).toHaveBeenCalled();
 });
 
@@ -187,24 +187,24 @@ it("surfaces review, draft, validation, and decision errors", async () => {
   );
 
   expect(await screen.findByText("Candidate one summary.")).toBeInTheDocument();
-  expect(screen.getByText("Completed")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Start AI review" }));
+  expect(screen.getByText("已完成")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "开始 AI 评审" }));
   expect(await screen.findByText("POST /api/reviews/start failed with 500: Review worker failed")).toBeInTheDocument();
-  expect(screen.getByText("Completed")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Draft pass reason" })).toBeEnabled();
+  expect(screen.getByText("已完成")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "生成淘汰原因草稿" })).toBeEnabled();
 
-  fireEvent.click(screen.getByRole("button", { name: "Draft pass reason" }));
+  fireEvent.click(screen.getByRole("button", { name: "生成淘汰原因草稿" }));
   expect(await screen.findByText("GET /api/reviews/review_1/draft-pass-reason failed with 500: Draft failed")).toBeInTheDocument();
-  expect(screen.getByText("Completed")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Submit pass" })).toBeEnabled();
+  expect(screen.getByText("已完成")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "确认淘汰" })).toBeEnabled();
 
-  fireEvent.click(screen.getByRole("button", { name: "Submit pass" }));
-  expect(screen.getByText("Pass decisions require a reason.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "确认淘汰" }));
+  expect(screen.getByText("淘汰决定必须填写原因。")).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("Pass reason"), {
+  fireEvent.change(screen.getByLabelText("淘汰原因"), {
     target: { value: "Not enough public evidence." }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Submit pass" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认淘汰" }));
   expect(await screen.findByText("POST /api/reviews/decision failed with 500: Decision failed")).toBeInTheDocument();
 });
 
@@ -244,15 +244,15 @@ it("renders review fallback fields and draft evidence", async () => {
     />
   );
 
-  expect(await screen.findByText("No score")).toBeInTheDocument();
-  expect(screen.getByText("No recommendation")).toBeInTheDocument();
-  expect(screen.getByText("No summary returned.")).toBeInTheDocument();
-  expect(screen.getByText("Evidence 1")).toBeInTheDocument();
-  expect(screen.getByText("No detail")).toBeInTheDocument();
+  expect(await screen.findByText("暂无评分")).toBeInTheDocument();
+  expect(screen.getByText("暂无建议")).toBeInTheDocument();
+  expect(screen.getByText("未返回评审摘要。")).toBeInTheDocument();
+  expect(screen.getByText("证据 1")).toBeInTheDocument();
+  expect(screen.getByText("无详情")).toBeInTheDocument();
   expect(screen.getByText("Portfolio")).toBeInTheDocument();
   expect(screen.getByText("https://example.com")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Draft pass reason" }));
+  fireEvent.click(screen.getByRole("button", { name: "生成淘汰原因草稿" }));
   expect(await screen.findByText("No shipped prototypes")).toBeInTheDocument();
 });
 
@@ -290,7 +290,7 @@ it("ignores a stale in-flight draft after the candidate changes", async () => {
   );
 
   expect(await screen.findByText("Candidate one summary.")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Draft pass reason" }));
+  fireEvent.click(screen.getByRole("button", { name: "生成淘汰原因草稿" }));
 
   rerender(
     <CandidateDetailPage selectedJobId="job_1" candidate={candidateTwo} onBack={() => undefined} />
@@ -345,10 +345,10 @@ it("disables AI review when deployment review config is incomplete", async () =>
 
   expect(
     await screen.findByText(
-      "AI review is unavailable in this deployment until production review config is completed."
+      "当前部署尚未完成生产评审配置，暂时无法使用 AI 评审。"
     )
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Start AI review" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "开始 AI 评审" })).toBeDisabled();
 });
 
 const candidateOne: Candidate = {
@@ -441,13 +441,13 @@ it("polls review job status until the review is completed", async () => {
     />
   );
 
-  expect(await screen.findByText("Ready for AI review.")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Start AI review" }));
-  expect(await screen.findByText("AI review running...")).toBeInTheDocument();
+  expect(await screen.findByText("已准备好进行 AI 评审。")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "开始 AI 评审" }));
+  expect(await screen.findByText("AI 评审进行中...")).toBeInTheDocument();
   expect(
-    within(screen.getByLabelText("Review status")).getByText("Running", { exact: true })
+    within(screen.getByLabelText("评审状态")).getByText("进行中", { exact: true })
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Submit proceed" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "确认推进" })).toBeDisabled();
 
   await act(async () => {
     resolveReviewJob(
@@ -473,11 +473,11 @@ it("polls review job status until the review is completed", async () => {
   });
 
   expect(await screen.findByText("Queued review summary.")).toBeInTheDocument();
-  expect(screen.getByText("AI review completed.")).toBeInTheDocument();
+  expect(screen.getByText("AI 评审已完成。")).toBeInTheDocument();
   expect(
-    within(screen.getByLabelText("Review status")).getByText("Completed", { exact: true })
+    within(screen.getByLabelText("评审状态")).getByText("已完成", { exact: true })
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Submit proceed" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "确认推进" })).toBeEnabled();
 });
 
 it("restores a pending review job after the user leaves and reopens the candidate", async () => {
@@ -550,9 +550,9 @@ it("restores a pending review job after the user leaves and reopens the candidat
     />
   );
 
-  expect(await screen.findByText("Ready for AI review.")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Start AI review" }));
-  expect(await screen.findByText("AI review queued...")).toBeInTheDocument();
+  expect(await screen.findByText("已准备好进行 AI 评审。")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "开始 AI 评审" }));
+  expect(await screen.findByText("AI 评审排队中...")).toBeInTheDocument();
 
   rerender(
     <CandidateDetailPage selectedJobId="job_1" candidate={null} onBack={() => undefined} />
@@ -567,8 +567,8 @@ it("restores a pending review job after the user leaves and reopens the candidat
   );
 
   expect(await screen.findByText("Recovered queued review summary.")).toBeInTheDocument();
-  expect(screen.getByText("AI review completed.")).toBeInTheDocument();
-  expect(screen.getByText("Completed")).toBeInTheDocument();
+  expect(screen.getByText("AI 评审已完成。")).toBeInTheDocument();
+  expect(screen.getByText("已完成")).toBeInTheDocument();
 });
 
 function jsonResponse(body: unknown) {

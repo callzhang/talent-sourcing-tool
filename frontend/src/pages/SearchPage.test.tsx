@@ -112,17 +112,17 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
   expect(screen.getAllByText("LinkedIn + GitHub + Exa + Bright Data Discover")).toHaveLength(2);
   expect(screen.getAllByText("San Francisco, CA")).toHaveLength(2);
-  expect(screen.getByText("Searching Channels")).toBeInTheDocument();
+  expect(screen.getAllByText("搜索渠道")).toHaveLength(2);
 
-  fireEvent.change(screen.getByLabelText("Candidate limit"), {
+  fireEvent.change(screen.getByLabelText("候选人数量"), {
     target: { value: "2" }
   });
-  fireEvent.submit(screen.getByLabelText("Search query").closest("form") as HTMLFormElement);
+  fireEvent.submit(screen.getByLabelText("搜索条件").closest("form") as HTMLFormElement);
 
   await waitFor(() => expect(onCandidatesFound).toHaveBeenCalledWith([candidate]));
-  expect(await screen.findByText("Search completed with 1 candidates.")).toBeInTheDocument();
+  expect(await screen.findByText("搜索完成，找到 1 位候选人。")).toBeInTheDocument();
   expect(screen.getByText("New Candidate")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Open Persisted Candidate" }));
+  fireEvent.click(screen.getByRole("button", { name: "查看 Persisted Candidate" }));
   expect(onReviewCandidate).toHaveBeenCalledWith(persistedCandidate);
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/search",
@@ -150,12 +150,12 @@ it("requires a selected JD before searching", () => {
     />
   );
 
-  fireEvent.change(screen.getByLabelText("Search query"), {
+  fireEvent.change(screen.getByLabelText("搜索条件"), {
     target: { value: "ai builders" }
   });
-  fireEvent.submit(screen.getByLabelText("Search query").closest("form") as HTMLFormElement);
+  fireEvent.submit(screen.getByLabelText("搜索条件").closest("form") as HTMLFormElement);
 
-  expect(screen.getByText("Create or select a JD before searching.")).toBeInTheDocument();
+  expect(screen.getByText("请先创建或选择岗位。")).toBeInTheDocument();
 });
 
 it("persists a queued run immediately and reports its worker progress", async () => {
@@ -200,16 +200,16 @@ it("persists a queued run immediately and reports its worker progress", async ()
     />
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Create search run" }));
+  fireEvent.click(screen.getByRole("button", { name: "创建搜索任务" }));
   expect(
     await screen.findByText(
-      "Running sourcing search on LinkedIn + GitHub + Exa + Bright Data Discover..."
+      "正在通过 LinkedIn + GitHub + Exa + Bright Data Discover 搜索候选人..."
     )
   ).toBeInTheDocument();
 
-  expect(await screen.findByText("1 persisted runs")).toBeInTheDocument();
-  expect(screen.getByText("pending · 0 candidates")).toBeInTheDocument();
-  expect(screen.getByLabelText("Worker 1; 0 of 4 channels complete")).toBeInTheDocument();
+  expect(await screen.findByText("1 条已保存记录")).toBeInTheDocument();
+  expect(screen.getByText("等待执行 · 0 位候选人")).toBeInTheDocument();
+  expect(screen.getByLabelText("执行器 1；已完成 0/4 个渠道")).toBeInTheDocument();
   await waitFor(() =>
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/search/search_run_new/run",
@@ -233,7 +233,7 @@ it("persists a queued run immediately and reports its worker progress", async ()
       candidates: [candidate]
     })
   );
-  expect(await screen.findByText("Search completed with 1 candidates.")).toBeInTheDocument();
+  expect(await screen.findByText("搜索完成，找到 1 位候选人。")).toBeInTheDocument();
 });
 
 it("shows search run load and create errors", async () => {
@@ -254,10 +254,10 @@ it("shows search run load and create errors", async () => {
 
   expect(await screen.findByText("GET /api/search?job_id=job_1 failed with 500: Unable to load search runs.")).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("Search query"), {
+  fireEvent.change(screen.getByLabelText("搜索条件"), {
     target: { value: "ai builders" }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create search run" }));
+  fireEvent.click(screen.getByRole("button", { name: "创建搜索任务" }));
 
   expect(await screen.findByText("POST /api/search failed with 500: Unable to create search run.")).toBeInTheDocument();
 });
@@ -276,7 +276,7 @@ it("selects a different JD from the search form", () => {
     />
   );
 
-  fireEvent.change(screen.getByLabelText("JD"), {
+  fireEvent.change(screen.getByLabelText("岗位"), {
     target: { value: "job_2" }
   });
 
@@ -334,13 +334,13 @@ it("disables unavailable deployment channels and blocks search when production s
   expect(linkedInChannel).toBeDisabled();
   expect(linkedInChannel.closest("label")).toHaveClass("checkbox-row");
   expect(linkedInChannel.nextElementSibling).toHaveClass("channel-option-label");
-  expect(screen.getAllByText("Unavailable")).toHaveLength(3);
+  expect(screen.getAllByText("暂不可用")).toHaveLength(3);
   expect(screen.getByRole("checkbox", { name: /Exa/ })).toBeDisabled();
   expect(screen.getByRole("checkbox", { name: /Bright Data Discover/ })).toBeDisabled();
   expect(screen.getByRole("checkbox", { name: /GitHub/ })).toBeChecked();
-  expect(screen.getByRole("button", { name: "Create search run" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "创建搜索任务" })).toBeDisabled();
   expect(
-    screen.getByText("Search is blocked in production until durable database storage is configured.")
+    screen.getByText("当前生产环境未配置持久化数据库，无法搜索。")
   ).toBeInTheDocument();
 });
 

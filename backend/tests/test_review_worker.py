@@ -105,11 +105,12 @@ Path({str(invocation_path)!r}).write_text(json.dumps({{
     assert "--ignore-user-config" in invocation["argv"]
     assert "--ignore-rules" in invocation["argv"]
     prompt = invocation["argv"][-1]
-    assert "Read input.json" in prompt
+    assert "input.json" in prompt
     assert "review.schema.json" in prompt
     assert "profile_data.raw.signals" in prompt
     assert "reason_code" in prompt
-    assert "write review.json" in prompt
+    assert "review.json" in prompt
+    assert "所有面向 HR 的文本字段必须使用简体中文" in prompt
     assert prompt != str(result.workspace)
 
 

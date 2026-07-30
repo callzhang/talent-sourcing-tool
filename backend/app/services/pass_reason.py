@@ -21,8 +21,8 @@ def draft_pass_reason(review: Any) -> dict[str, Any]:
     evidence = [*risks, *uncertainties]
     reason_code = _structured_reason_code(normalized_review)
 
-    title = "Structured pass reason"
-    summary = f"the review identified {reason_code} as the primary gap"
+    title = "结构化淘汰原因"
+    summary = f"评审将 {reason_code} 识别为主要缺口"
 
     return {
         "reason_code": reason_code,
@@ -39,15 +39,15 @@ def suggest_refinements(pass_reasons: list[dict[str, Any]]) -> list[dict[str, An
         reason_code = _safe_reason_code(reason.get("reason_code"))
         if reason_code is None:
             continue
-        reason_text = _safe_reason_code(reason.get("reason_text")) or "No additional HR explanation recorded."
+        reason_text = _safe_reason_code(reason.get("reason_text")) or "尚未记录补充的 HR 说明。"
         reason_text_by_code.setdefault(reason_code, reason_text)
 
     return [
         {
             "suggestion_type": "feedback_review",
             "suggestion_text": (
-                "Review the JD rubric and sourcing query against this recorded pass reason "
-                f"({reason_code}): {reason_text[:MAX_REFINEMENT_REASON_LENGTH]}"
+                "请结合以下已记录的淘汰原因，复核 JD 评分标准和搜索条件 "
+                f"（{reason_code}）：{reason_text[:MAX_REFINEMENT_REASON_LENGTH]}"
             ),
             "reason_codes": [reason_code],
         }
@@ -125,5 +125,5 @@ def _structured_reason_code(review: dict[str, Any]) -> str:
 
 def _reason_text(title: str, summary: str, evidence: list[str]) -> str:
     if evidence:
-        return f"{title}: {summary}. Evidence: {evidence[0]}"
-    return f"{title}: {summary}."
+        return f"{title}：{summary}。依据：{evidence[0]}"
+    return f"{title}：{summary}。"

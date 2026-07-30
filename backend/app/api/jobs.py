@@ -67,7 +67,7 @@ def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -
         session.flush()
         rubric = Rubric(
             job_id=job.id,
-            name=f"{job.title} Rubric",
+            name=f"{job.title} 评分标准",
             criteria=[rubric_payload],
         )
         session.add(rubric)

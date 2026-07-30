@@ -23,7 +23,7 @@ it("asks for a JD before loading candidates", () => {
     />
   );
 
-  expect(screen.getByText("Select a JD before reviewing candidates.")).toBeInTheDocument();
+  expect(screen.getByText("请先选择岗位再查看候选人。")).toBeInTheDocument();
 });
 
 it("loads searched candidates and sends selected candidate to review", async () => {
@@ -57,12 +57,12 @@ it("loads searched candidates and sends selected candidate to review", async () 
     />
   );
 
-  const detailPane = screen.getByRole("region", { name: "Candidate detail" });
-  expect(within(detailPane).getByText("Rank 2")).toBeInTheDocument();
-  expect(within(detailPane).getByText("No headline captured")).toBeInTheDocument();
+  const detailPane = screen.getByRole("region", { name: "候选人详情" });
+  expect(within(detailPane).getByText("第 2 名")).toBeInTheDocument();
+  expect(within(detailPane).getByText("未获取简介")).toBeInTheDocument();
   expect(within(detailPane).getByText("LaunchCo · Remote")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Review Candidate One" }));
+  fireEvent.click(screen.getByRole("button", { name: "评审 Candidate One" }));
   expect(onReviewCandidate).toHaveBeenCalledWith(candidate);
 });
 
@@ -81,8 +81,8 @@ it("renders candidate listings in the left pane and selected candidate details i
     />
   );
 
-  const queuePane = await screen.findByRole("region", { name: "Candidate listings" });
-  const detailPane = await screen.findByRole("region", { name: "Candidate detail" });
+  const queuePane = await screen.findByRole("region", { name: "候选人列表" });
+  const detailPane = await screen.findByRole("region", { name: "候选人详情" });
 
   expect(queuePane).toContainElement(within(queuePane).getByRole("button", { name: /Candidate One/ }));
   expect(detailPane).toContainElement(screen.getByText("Evidence of structured PMF interviews."));
@@ -139,7 +139,7 @@ it("renders empty and error states for candidate loading", async () => {
     />
   );
 
-  expect(await screen.findByText("No searched candidates for this JD yet.")).toBeInTheDocument();
+  expect(await screen.findByText("该岗位尚无搜索到的候选人。")).toBeInTheDocument();
 
   rerender(
     <CandidatesPage
@@ -200,7 +200,7 @@ it("lets the user switch the JD used by the candidate queue", async () => {
     />
   );
 
-  fireEvent.change(screen.getByLabelText("Review queue JD"), {
+  fireEvent.change(screen.getByLabelText("评审岗位"), {
     target: { value: "job_pmm" }
   });
 
@@ -236,11 +236,11 @@ it("explains why the queue stays empty when production search is blocked by stor
 
   expect(
     await screen.findByText(
-      "Search is disabled in this deployment until durable database storage is configured."
+      "当前生产环境未配置持久化数据库，无法搜索。"
     )
   ).toBeInTheDocument();
   expect(
-    screen.getByText("Candidate review will stay empty in production until search can write durable data.")
+    screen.getByText("当前生产环境无法写入搜索数据，候选人评审队列将保持为空。")
   ).toBeInTheDocument();
 });
 

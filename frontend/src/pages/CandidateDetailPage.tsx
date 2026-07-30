@@ -39,7 +39,7 @@ export function CandidateDetailPage({
   const [draft, setDraft] = useState<DraftPassReason | null>(null);
   const [notes, setNotes] = useState("");
   const [passReason, setPassReason] = useState("");
-  const [status, setStatus] = useState("Ready for AI review.");
+  const [status, setStatus] = useState("已准备好进行 AI 评审。");
   const [isWorking, setIsWorking] = useState(false);
   const currentContextRef = useRef({
     selectedJobId,
@@ -77,12 +77,12 @@ export function CandidateDetailPage({
     setIsWorking(false);
 
     if (!candidate || !selectedJobId) {
-      setStatus("Ready for AI review.");
+      setStatus("已准备好进行 AI 评审。");
       return;
     }
 
     let ignore = false;
-    setStatus("Loading candidate review context...");
+    setStatus("正在加载候选人评审信息...");
     api
       .getCandidate(candidate.id, selectedJobId)
       .then((freshCandidate) => {
@@ -103,7 +103,7 @@ export function CandidateDetailPage({
             candidateId: latestReview.candidate_id
           });
           setReview(latestReview.review);
-          setStatus("Loaded latest review.");
+          setStatus("已加载最近一次评审。");
           return;
         }
         const latestReviewJob = await api.getLatestReviewJob(selectedJobId, candidate.id);
@@ -112,8 +112,8 @@ export function CandidateDetailPage({
         } else if (!ignore) {
           setStatus(
             reviewConfigured
-              ? "Ready for AI review."
-              : "AI review is unavailable in this deployment until production review config is completed."
+              ? "已准备好进行 AI 评审。"
+              : "当前部署尚未完成生产评审配置，暂时无法使用 AI 评审。"
           );
         }
       })
@@ -144,7 +144,7 @@ export function CandidateDetailPage({
         }
       } catch (error) {
         if (!ignore && isCurrentCandidateContext(selectedJobId ?? "", candidate?.id ?? "")) {
-          setStatus(error instanceof Error ? error.message : "Unable to refresh review job.");
+          setStatus(error instanceof Error ? error.message : "无法刷新评审任务。");
         }
       }
     }
@@ -188,10 +188,10 @@ export function CandidateDetailPage({
     return (
       <section className="card">
         <button type="button" className="text-action" onClick={onBack}>
-          Back to candidates
+          返回候选人
         </button>
-        <h2>Candidate Review</h2>
-        <p className="empty-state">Select a searched candidate to review.</p>
+        <h2>候选人评审</h2>
+        <p className="empty-state">请选择已搜索到的候选人进行评审。</p>
       </section>
     );
   }
@@ -200,10 +200,10 @@ export function CandidateDetailPage({
     return (
       <section className="card">
         <button type="button" className="text-action" onClick={onBack}>
-          Back to candidates
+          返回候选人
         </button>
-        <h2>Candidate Review</h2>
-        <p className="empty-state">Loading candidate review context...</p>
+        <h2>候选人评审</h2>
+        <p className="empty-state">正在加载候选人评审信息...</p>
       </section>
     );
   }
@@ -217,7 +217,7 @@ export function CandidateDetailPage({
     const requestedCandidateId = loadedCandidate.id;
     setIsWorking(true);
     setReviewJobStatus("running");
-    setStatus("Running AI review...");
+    setStatus("正在进行 AI 评审...");
     try {
       const result = await api.startReview({
         job_id: requestedJobId,
@@ -236,7 +236,7 @@ export function CandidateDetailPage({
           candidateId: requestedCandidateId
         });
         setReview(result.review);
-        setStatus("AI review completed.");
+        setStatus("AI 评审已完成。");
       } else {
         setReviewJobStatus(normalizeReviewStage(result.status));
         setReviewContext(null);
@@ -246,7 +246,7 @@ export function CandidateDetailPage({
     } catch (error) {
       if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
         setReviewJobStatus(reviewContext && review ? "completed" : "failed");
-        setStatus(error instanceof Error ? error.message : "Unable to start review.");
+        setStatus(error instanceof Error ? error.message : "无法启动评审。");
       }
     } finally {
       if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
@@ -258,12 +258,12 @@ export function CandidateDetailPage({
   async function draftPassReason() {
     /* c8 ignore next 4 -- The draft button is disabled until a review context exists. */
     if (!reviewContext) {
-      setStatus("Run a review before drafting a pass reason.");
+      setStatus("请先完成评审，再生成淘汰原因草稿。");
       return;
     }
     const requestedReviewContext = reviewContext;
     setIsWorking(true);
-    setStatus("Drafting pass reason...");
+    setStatus("正在生成淘汰原因草稿...");
     try {
       const generatedDraft = await api.getDraftPassReason(requestedReviewContext.reviewId);
       if (
@@ -277,7 +277,7 @@ export function CandidateDetailPage({
       }
       setDraft(generatedDraft);
       setPassReason(generatedDraft.reason_text);
-      setStatus("Draft pass reason ready.");
+      setStatus("淘汰原因草稿已生成。");
     } catch (error) {
       if (
         isCurrentReviewContext(
@@ -286,7 +286,7 @@ export function CandidateDetailPage({
           requestedReviewContext.reviewId
         )
       ) {
-        setStatus(error instanceof Error ? error.message : "Unable to draft pass reason.");
+        setStatus(error instanceof Error ? error.message : "无法生成淘汰原因草稿。");
       }
     } finally {
       if (
@@ -311,7 +311,7 @@ export function CandidateDetailPage({
     const requestedReviewContext = reviewContext;
     const requestedDraft = draft;
     if (decision === "pass" && passReason.trim().length === 0) {
-      setStatus("Pass decisions require a reason.");
+      setStatus("淘汰决定必须填写原因。");
       return;
     }
     if (
@@ -327,7 +327,7 @@ export function CandidateDetailPage({
       return;
     }
     setIsWorking(true);
-    setStatus(`Saving ${decision} decision...`);
+    setStatus(`正在保存${decision === "pass" ? "淘汰" : "推进"}决定...`);
     try {
       await api.createDecision({
         job_id: requestedJobId,
@@ -339,11 +339,11 @@ export function CandidateDetailPage({
         pass_reason_text: decision === "pass" ? passReason : undefined
       });
       if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
-        setStatus(`Saved ${decision} decision.`);
+        setStatus(`已保存${decision === "pass" ? "淘汰" : "推进"}决定。`);
       }
     } catch (error) {
       if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
-        setStatus(error instanceof Error ? error.message : "Unable to save decision.");
+        setStatus(error instanceof Error ? error.message : "无法保存决定。");
       }
     } finally {
       if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
@@ -376,7 +376,7 @@ export function CandidateDetailPage({
       setReview(activeReviewJob.review);
     }
     if (activeReviewJob.status === "failed") {
-      setStatus(activeReviewJob.error_message ?? "AI review failed.");
+      setStatus(activeReviewJob.error_message ?? "AI 评审失败。");
       return;
     }
     setStatus(reviewStatusMessage(activeReviewJob.status));
@@ -386,18 +386,18 @@ export function CandidateDetailPage({
     <section className="workspace-grid detail-grid" aria-labelledby="candidate-detail-heading">
       <div className="card">
         <button type="button" className="text-action" onClick={onBack}>
-          Back to candidates
+          返回候选人
         </button>
-        <p className="section-kicker">Candidate detail</p>
+        <p className="section-kicker">候选人详情</p>
         <h2 id="candidate-detail-heading">{loadedCandidate.name}</h2>
-        <p>{loadedCandidate.headline ?? "No headline captured"}</p>
+        <p>{loadedCandidate.headline ?? "未获取简介"}</p>
         <p className="muted">
           {[loadedCandidate.current_company, loadedCandidate.location].filter(Boolean).join(" · ")}
         </p>
         <a href={loadedCandidate.profile_url} target="_blank" rel="noreferrer">
-          Open {profileSourceLabel(loadedCandidate.profile_source)} profile
+          打开 {profileSourceLabel(loadedCandidate.profile_source)} 资料
         </a>
-        <div className="review-status-panel" aria-label="Review status">
+        <div className="review-status-panel" aria-label="评审状态">
           <div className="split-heading">
             <span className={`status-pill status-pill-${reviewStage.tone}`}>{reviewStage.label}</span>
             {reviewJobId ? <code>{reviewJobId.slice(0, 16)}</code> : null}
@@ -410,13 +410,13 @@ export function CandidateDetailPage({
           onClick={startReview}
           disabled={isWorking || !reviewConfigured || decisionLocked}
         >
-          Start AI review
+          开始 AI 评审
         </button>
         <p className="muted">{status}</p>
       </div>
 
       <div className="card">
-        <p className="section-kicker">AI review</p>
+        <p className="section-kicker">AI 评审</p>
         <ReviewBlock review={review} />
         <button
           type="button"
@@ -424,19 +424,19 @@ export function CandidateDetailPage({
           onClick={draftPassReason}
           disabled={isWorking || reviewId === null || !reviewReadyForDecision}
         >
-          Draft pass reason
+          生成淘汰原因草稿
         </button>
         {draft ? <EvidenceList evidence={draft.evidence} /> : null}
       </div>
 
       <form className="card stack" onSubmit={handleProceed}>
-        <p className="section-kicker">Human decision</p>
+        <p className="section-kicker">人工决定</p>
         <label>
-          Decision notes and feedback
+          决定备注与反馈
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} />
         </label>
         <label>
-          Pass reason
+          淘汰原因
           <textarea
             value={passReason}
             onChange={(event) => setPassReason(event.target.value)}
@@ -450,10 +450,10 @@ export function CandidateDetailPage({
             disabled={isWorking || !reviewReadyForDecision}
             onClick={() => void submitDecision("pass")}
           >
-            Submit pass
+            确认淘汰
           </button>
           <button type="submit" className="primary-action" disabled={isWorking || !reviewReadyForDecision}>
-            Submit proceed
+            确认推进
           </button>
         </div>
       </form>
@@ -463,18 +463,18 @@ export function CandidateDetailPage({
 
 function reviewStatusMessage(status: string): string {
   if (status === "completed") {
-    return "AI review completed.";
+    return "AI 评审已完成。";
   }
   if (status === "failed") {
-    return "AI review failed.";
+    return "AI 评审失败。";
   }
   if (status === "running") {
-    return "AI review running...";
+    return "AI 评审进行中...";
   }
   if (status === "pending") {
-    return "AI review queued...";
+    return "AI 评审排队中...";
   }
-  return `AI review status: ${status}`;
+  return `AI 评审状态：${status}`;
 }
 
 function currentReviewStage({
@@ -493,47 +493,47 @@ function currentReviewStage({
   if (!reviewConfigured) {
     return {
       key: "disabled",
-      label: "Unavailable",
-      description: "Production review configuration is incomplete.",
+      label: "暂不可用",
+      description: "当前生产环境的 AI 评审配置尚未完成。",
       tone: "warning"
     };
   }
   if (reviewJobStatus === "failed") {
     return {
       key: "failed",
-      label: "Failed",
-      description: "The latest review attempt failed. Check the error message below.",
+      label: "失败",
+      description: "最近一次评审失败，请查看下方错误信息。",
       tone: "error"
     };
   }
   if (reviewJobStatus === "pending") {
     return {
       key: "pending",
-      label: "Queued",
-      description: "The review job has been created and is waiting to start.",
+      label: "排队中",
+      description: "评审任务已创建，正在等待开始。",
       tone: "warning"
     };
   }
   if (reviewJobStatus === "running") {
     return {
       key: "running",
-      label: "Running",
-      description: "The AI review is currently in progress. Decision actions stay locked until it finishes.",
+      label: "进行中",
+      description: "AI 正在评审，完成前无法提交人工决定。",
       tone: "warning"
     };
   }
   if (reviewJobStatus === "completed" && reviewJobId && reviewContext && review) {
     return {
       key: "completed",
-      label: "Completed",
-      description: "A structured AI review is available and ready for human decision.",
+      label: "已完成",
+      description: "结构化 AI 评审已生成，可进行人工决定。",
       tone: "success"
     };
   }
   return {
     key: "idle",
-    label: "Ready",
-    description: "No active AI review is running for this candidate yet.",
+    label: "待评审",
+    description: "该候选人当前没有进行中的 AI 评审。",
     tone: "neutral"
   };
 }
@@ -576,28 +576,39 @@ function profileSourceLabel(value: string): string {
       arxiv: "arXiv",
       exa: "Exa",
       brightdata_discover: "Bright Data Discover"
-    }[value] ?? "candidate"
+    }[value] ?? "候选人"
   );
 }
 
 function ReviewBlock({ review }: { review: ReviewPayload | null }) {
   if (!review) {
-    return <p className="empty-state">Start an AI review to see score, recommendation, and evidence.</p>;
+    return <p className="empty-state">开始 AI 评审后，可查看评分、建议和证据。</p>;
   }
   return (
     <div className="review-block">
-      <div className="score-badge">{review.overall_score ?? "No score"}</div>
-      <h3>{review.recommendation ?? "No recommendation"}</h3>
-      <p>{review.decision_summary ?? "No summary returned."}</p>
+      <div className="score-badge">{review.overall_score ?? "暂无评分"}</div>
+      <h3>{recommendationLabel(review.recommendation)}</h3>
+      <p>{review.decision_summary ?? "未返回评审摘要。"}</p>
       <div className="evidence-grid">
         {(review.evidence ?? []).map((item, index) => (
           <article key={`${String(item.label ?? "evidence")}-${index}`} className="evidence-card">
-            <strong>{String(item.label ?? `Evidence ${index + 1}`)}</strong>
-            <span>{String(item.detail ?? item.url ?? "No detail")}</span>
+            <strong>{String(item.label ?? `证据 ${index + 1}`)}</strong>
+            <span>{String(item.detail ?? item.url ?? "无详情")}</span>
           </article>
         ))}
       </div>
     </div>
+  );
+}
+
+function recommendationLabel(recommendation: string | null | undefined): string {
+  return (
+    {
+      strong_proceed: "强烈建议推进",
+      proceed: "建议推进",
+      borderline: "边界匹配",
+      pass: "不建议推进"
+    }[recommendation ?? ""] ?? "暂无建议"
   );
 }
 

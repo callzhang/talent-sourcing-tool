@@ -22,7 +22,7 @@ export function CandidatesPage({
   onLoadedCandidates,
   onReviewCandidate
 }: CandidatesPageProps) {
-  const [status, setStatus] = useState("Loading searched candidates...");
+  const [status, setStatus] = useState("正在加载已搜索候选人...");
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
   const searchBlockedByStorage =
     systemStatus?.environment === "vercel" &&
@@ -38,7 +38,7 @@ export function CandidatesPage({
 
   useEffect(() => {
     if (!selectedJobId) {
-      setStatus("Select a JD before reviewing candidates.");
+      setStatus("请先选择岗位再查看候选人。");
       return;
     }
     let ignore = false;
@@ -57,10 +57,10 @@ export function CandidatesPage({
         });
         setStatus(
           loadedCandidates.length > 0
-            ? "Review candidates from completed search runs."
+            ? "请查看已完成搜索任务中的候选人。"
             : searchBlockedByStorage
-              ? "Search is disabled in this deployment until durable database storage is configured."
-              : "No searched candidates for this JD yet."
+              ? "当前生产环境未配置持久化数据库，无法搜索。"
+              : "该岗位尚无搜索到的候选人。"
         );
         if (loadedCandidates.length === 0 && jobs.length > 1) {
           await selectLatestCandidateJob(selectedJobId, jobs, onSelectJob, () => ignore);
@@ -68,7 +68,7 @@ export function CandidatesPage({
       })
       .catch((error: unknown) => {
         if (!ignore) {
-          setStatus(error instanceof Error ? error.message : "Unable to load candidates.");
+          setStatus(error instanceof Error ? error.message : "无法加载候选人。");
         }
       });
     return () => {
@@ -78,12 +78,12 @@ export function CandidatesPage({
 
   return (
     <div className="candidates-grid">
-      <section className="card candidate-list-pane" aria-label="Candidate listings">
-        <p className="section-kicker">Candidate review queue</p>
-        <h2 id="candidates-heading">Candidates</h2>
+      <section className="card candidate-list-pane" aria-label="候选人列表">
+        <p className="section-kicker">候选人评审队列</p>
+        <h2 id="candidates-heading">候选人</h2>
         {jobs.length > 0 ? (
           <label className="compact-field">
-            Review queue JD
+            评审岗位
             <select
               value={selectedJobId ?? ""}
               onChange={(event) => onSelectJob(event.target.value)}
@@ -99,7 +99,7 @@ export function CandidatesPage({
         <p className="muted">{status}</p>
         {searchBlockedByStorage ? (
           <p className="muted">
-            Candidate review will stay empty in production until search can write durable data.
+            当前生产环境无法写入搜索数据，候选人评审队列将保持为空。
           </p>
         ) : null}
         <div className="candidate-list">
@@ -112,15 +112,15 @@ export function CandidatesPage({
               onClick={() => setActiveCandidateId(candidate.id)}
             >
               <strong>{candidate.name}</strong>
-              <span>{candidate.headline ?? "No headline captured"}</span>
+              <span>{candidate.headline ?? "未获取简介"}</span>
               <span>{[candidate.current_company, candidate.location].filter(Boolean).join(" · ")}</span>
             </button>
           ))}
         </div>
       </section>
 
-      <section className="card candidate-detail-pane" aria-label="Candidate detail">
-        <p className="section-kicker">Selected candidate</p>
+      <section className="card candidate-detail-pane" aria-label="候选人详情">
+        <p className="section-kicker">当前候选人</p>
         <CandidateDetail candidate={activeCandidate} onReviewCandidate={onReviewCandidate} />
       </section>
     </div>
@@ -160,7 +160,7 @@ function CandidateDetail({
   onReviewCandidate: (candidate: Candidate) => void;
 }) {
   if (candidate === null) {
-    return <p className="empty-state">Select a candidate to inspect sourcing evidence.</p>;
+    return <p className="empty-state">请选择候选人以查看搜索证据。</p>;
   }
 
   const raw = rawProfile(candidate);
@@ -172,20 +172,20 @@ function CandidateDetail({
     <div className="candidate-detail">
       <div className="split-heading">
         <h3>{candidate.name}</h3>
-        <span>{candidate.last_search_rank ? `Rank ${candidate.last_search_rank}` : "Sourced"}</span>
+        <span>{candidate.last_search_rank ? `第 ${candidate.last_search_rank} 名` : "已入库"}</span>
       </div>
-      <p>{candidate.headline ?? "No headline captured"}</p>
+      <p>{candidate.headline ?? "未获取简介"}</p>
       <p className="muted">
         {[candidate.current_company, candidate.location].filter(Boolean).join(" · ")}
       </p>
       <a href={candidate.profile_url} target="_blank" rel="noreferrer">
-        Open {sourceLabel(candidate.profile_source)} profile
+        打开 {sourceLabel(candidate.profile_source)} 资料
       </a>
-      <EvidenceList label="Signals" items={signals} />
-      <EvidenceList label="Risks" items={risks} />
+      <EvidenceList label="匹配信号" items={signals} />
+      <EvidenceList label="风险信号" items={risks} />
       {sources.length > 0 ? (
         <div>
-          <p className="detail-label">Sources</p>
+          <p className="detail-label">来源</p>
           <div className="source-list">
             {sources.map((source) => (
               <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
@@ -200,7 +200,7 @@ function CandidateDetail({
         className="secondary-action"
         onClick={() => onReviewCandidate(candidate)}
       >
-        Review {candidate.name}
+        评审 {candidate.name}
       </button>
     </div>
   );
@@ -270,13 +270,13 @@ function sourceLabel(value: string): string {
       arxiv: "arXiv",
       exa: "Exa",
       brightdata_discover: "Bright Data Discover"
-    }[value] ?? "candidate"
+    }[value] ?? "候选人"
   );
 }
 
 function inferSourceType(url: string | null): string {
   if (!url) {
-    return "source";
+    return "来源";
   }
   if (url.includes("linkedin.com")) {
     return "linkedin";
@@ -307,7 +307,7 @@ function formatSourceLabel(sourceType: string, title: string): string {
     arxiv: "arXiv",
     exa: "Exa",
     brightdata_discover: "Bright Data Discover",
-    source: "Source"
+    source: "来源"
   };
   return `${labels[sourceType] ?? sourceType}: ${title}`;
 }

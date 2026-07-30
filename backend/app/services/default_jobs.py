@@ -32,25 +32,20 @@ DEFAULT_JOBS: tuple[JobCreate, ...] = (
         search_channels=["linkedin", "github", "exa", "brightdata_discover"],
     ),
     JobCreate(
-        title="Founding PMM / PMF Discovery Lead",
+        title="美国市场产品营销与 PMF 探索负责人",
         description=(
-            "Own North America PMF discovery for Friday / PreSeen as the first US product marketing and "
-            "market discovery hire. This is not a traditional PMM, campaign marketing, or enterprise GTM role. "
-            "The role translates the product from memory / agent / workspace language into sharp US market "
-            "positioning, validates ICPs and PMF wedges, manages design partner discovery, and turns user evidence "
-            "into product decisions."
+            "作为 Friday / PreSeen 首位美国市场产品营销和市场探索成员，负责北美 PMF 探索。该岗位不是传统 "
+            "PMM、活动营销或企业销售 GTM 岗位；需要把产品的记忆、智能体和工作空间能力转化为清晰的美国市场 "
+            "定位，验证 ICP 和 PMF 切入点，推进设计合作伙伴探索，并把用户证据沉淀为产品决策。"
         ),
         region="San Francisco, CA",
         target_profile_text=(
-            "Strong English product narrative and positioning ability; high-quality user interview skill; "
-            "0-1 AI/SaaS or early-stage product marketing experience; ability to distinguish polite interest "
-            "from real usage or payment intent; deep hands-on usage of mainstream AI tools; able to work with "
-            "engineering to turn feedback into testable experiments."
+            "具备优秀的英文产品叙事与定位能力和高质量用户访谈能力；有 0-1 AI/SaaS 或早期产品营销经验；能区分 "
+            "礼貌性兴趣与真实使用或付费意愿；深度使用主流 AI 工具；能与工程团队协作，把反馈转化为可验证实验。"
         ),
         red_flags_text=(
-            "Traditional campaign-only, brand-only, PR-only, or enterprise closing background; PMM who only "
-            "writes copy and cannot judge PMF; candidates who only summarize feedback without product tradeoff "
-            "judgment; candidates who do not use AI tools intensively."
+            "仅有活动、品牌、公关或企业成交背景；只写文案却无法判断 PMF 的 PMM；只能汇总反馈、没有产品取舍判断；"
+            "不深度使用 AI 工具。"
         ),
         search_notes=(
             "founding PMM; product marketing AI; product-led growth AI; PMF; early stage SaaS; user research AI; "
@@ -59,25 +54,20 @@ DEFAULT_JOBS: tuple[JobCreate, ...] = (
         search_channels=["linkedin", "github", "exa", "brightdata_discover"],
     ),
     JobCreate(
-        title="AI Product Engineer",
+        title="AI 产品工程师",
         description=(
-            "Build AI-native prototypes, demos, and workflows for North America PMF discovery on top of Friday's "
-            "core capabilities. This is not a pure AI engineer, pure full-stack engineer, traditional sales "
-            "engineer, or demo-only vibe coder role. The role listens to customer/user needs, turns them into "
-            "demonstrable workflows, and separates what must be real product capability from what can be mocked "
-            "for fast learning."
+            "基于 Friday 核心能力，为北美 PMF 探索构建 AI 原生原型、演示和工作流。该岗位不是纯 AI 工程、纯全栈、"
+            "传统售前或只做演示的 vibe coding 岗位；需要听取客户和用户需求，将其转化为可展示的工作流，并判断哪些 "
+            "必须成为真实产品能力、哪些可以用模拟方案快速学习。"
         ),
         region="San Francisco, CA",
         target_profile_text=(
-            "Very strong vibe-coding velocity plus real engineering fundamentals; product sense; customer "
-            "communication sufficient to explain demos, confirm requirements, and record feedback; hands-on "
-            "full-stack or AI application building; understanding of agent workflows, connectors, memory, "
-            "artifacts, recipes, tasks/threads, and reusable templates."
+            "具备很强的 vibe coding 速度和真实工程基础；有产品感；能向客户讲清演示、确认需求并记录反馈；亲自构建过 "
+            "全栈或 AI 应用；理解智能体工作流、连接器、记忆、产物、配方、任务/线程和可复用模板。"
         ),
         red_flags_text=(
-            "Only algorithm/backend interview strength with no user curiosity; only beautiful demos with no "
-            "system constraints; prompt-only background without real engineering; traditional presales engineer "
-            "who can explain but cannot build."
+            "只有算法或后端面试能力、缺少用户好奇心；只有漂亮演示却没有系统约束意识；只有提示词经验、没有真实工程能力；"
+            "只能讲解、不能构建的传统售前工程师。"
         ),
         search_notes=(
             "founding engineer AI; product engineer AI; AI prototyping; agent workflow; full-stack AI; Cursor; "

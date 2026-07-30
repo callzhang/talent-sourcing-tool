@@ -40,7 +40,7 @@ export function JobsPage({
     "exa",
     "brightdata_discover"
   ]);
-  const [status, setStatus] = useState("Loading jobs...");
+  const [status, setStatus] = useState("正在加载岗位...");
   const [isSaving, setIsSaving] = useState(false);
   const jobsBlockedByStorage =
     systemStatus?.environment === "vercel" &&
@@ -55,14 +55,14 @@ export function JobsPage({
           return;
         }
         setJobs(loadedJobs);
-        setStatus(loadedJobs.length > 0 ? "Select a JD to inspect its rubric." : "No JDs yet.");
+        setStatus(loadedJobs.length > 0 ? "请选择岗位以查看评分标准。" : "尚无岗位。");
         if (!selectedJobId && loadedJobs[0]) {
           onSelectJob(loadedJobs[0].id);
         }
       })
       .catch((error: unknown) => {
         if (!ignore) {
-          setStatus(error instanceof Error ? error.message : "Unable to load jobs.");
+          setStatus(error instanceof Error ? error.message : "无法加载岗位。");
         }
       });
     return () => {
@@ -86,7 +86,7 @@ export function JobsPage({
       })
       .catch((error: unknown) => {
         if (!ignore) {
-          setStatus(error instanceof Error ? error.message : "Unable to load rubric.");
+          setStatus(error instanceof Error ? error.message : "无法加载评分标准。");
         }
       });
     return () => {
@@ -97,11 +97,11 @@ export function JobsPage({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (jobsBlockedByStorage) {
-      setStatus("Job creation is disabled in this deployment until durable database storage is configured.");
+      setStatus("当前部署尚未配置持久化数据库，无法新建岗位。");
       return;
     }
     setIsSaving(true);
-    setStatus("Generating rubric...");
+    setStatus("正在生成评分标准...");
     try {
       const created = await api.createJob({
         title,
@@ -116,9 +116,9 @@ export function JobsPage({
       setActiveJob(created);
       setIsCreating(false);
       onCreatedJob(created);
-      setStatus("JD created and rubric generated.");
+      setStatus("岗位和评分标准已创建。");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to create JD.");
+      setStatus(error instanceof Error ? error.message : "无法创建岗位。");
     } finally {
       setIsSaving(false);
     }
@@ -126,23 +126,23 @@ export function JobsPage({
 
   return (
     <div className="jobs-grid">
-      <section className="card job-list-pane" aria-label="Job listings">
-        <p className="section-kicker">Jobs</p>
+      <section className="card job-list-pane" aria-label="岗位列表">
+        <p className="section-kicker">岗位</p>
         <div className="split-heading">
-          <h2 id="jobs-heading">Job listings</h2>
+          <h2 id="jobs-heading">岗位列表</h2>
           <button
             type="button"
             className="secondary-action"
             onClick={startNewJob}
             disabled={jobsBlockedByStorage}
           >
-            New Job
+            新建岗位
           </button>
         </div>
         <p className="muted">{status}</p>
         {jobsBlockedByStorage ? (
           <p className="muted">
-            Job creation is blocked in production until durable database storage is configured.
+            当前生产环境未配置持久化数据库，无法新建岗位。
           </p>
         ) : null}
         <div className="job-list">
@@ -160,11 +160,11 @@ export function JobsPage({
         </div>
       </section>
 
-      <section className="card job-detail-pane" aria-label="Job detail">
+      <section className="card job-detail-pane" aria-label="岗位详情">
         {isCreating ? (
           <section aria-labelledby="create-job-heading">
-            <p className="section-kicker">New job</p>
-            <h2 id="create-job-heading">Job draft</h2>
+            <p className="section-kicker">新建岗位</p>
+            <h2 id="create-job-heading">岗位信息</h2>
             <JobForm
               title={title}
               description={description}
@@ -187,9 +187,9 @@ export function JobsPage({
           </section>
         ) : (
           <>
-            <p className="section-kicker">Active rubric</p>
+            <p className="section-kicker">当前评分标准</p>
             <div className="split-heading">
-              <h3>{activeJob?.job.title ?? "No JD selected"}</h3>
+              <h3>{activeJob?.job.title ?? "未选择岗位"}</h3>
               {activeJob ? <span>{`v${activeJob.rubric.version}`}</span> : null}
             </div>
             <JobDetail job={activeJob} />
@@ -202,7 +202,7 @@ export function JobsPage({
 
   function startNewJob() {
     if (jobsBlockedByStorage) {
-      setStatus("Job creation is disabled in this deployment until durable database storage is configured.");
+      setStatus("当前部署尚未配置持久化数据库，无法新建岗位。");
       return;
     }
     setIsCreating(true);
@@ -224,12 +224,12 @@ function JobDetail({ job }: { job: JobWithRubric | null }) {
 
   return (
     <div className="job-detail">
-      <DetailBlock label="JD description" value={job.job.description} />
-      <DetailBlock label="Region" value={job.job.region} />
-      <DetailBlock label="Target profile" value={job.job.target_profile_text} />
-      <DetailBlock label="Red flags" value={job.job.red_flags_text} />
-      <DetailBlock label="Search notes" value={job.job.search_notes} />
-      <DetailBlock label="Search channels" value={job.job.search_channels.map(channelLabel).join(", ")} />
+      <DetailBlock label="职位描述" value={job.job.description} />
+      <DetailBlock label="工作地区" value={job.job.region} />
+      <DetailBlock label="目标画像" value={job.job.target_profile_text} />
+      <DetailBlock label="排除条件" value={job.job.red_flags_text} />
+      <DetailBlock label="搜索要点" value={job.job.search_notes} />
+      <DetailBlock label="搜索渠道" value={job.job.search_channels.map(channelLabel).join(", ")} />
     </div>
   );
 }
@@ -249,7 +249,7 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
 
 function RubricPreview({ job }: { job: JobWithRubric | null }) {
   if (job === null) {
-    return <p className="empty-state">Select a JD to see rubric dimensions.</p>;
+    return <p className="empty-state">请选择岗位以查看评分维度。</p>;
   }
 
   return (
@@ -261,10 +261,10 @@ function RubricPreview({ job }: { job: JobWithRubric | null }) {
           {dimension.description ? <p>{dimension.description}</p> : null}
           {dimension.scoring_guidance ? <p>{dimension.scoring_guidance}</p> : null}
           {dimension.signals && dimension.signals.length > 0 ? (
-            <EvidenceList label="Signals" items={dimension.signals} />
+            <EvidenceList label="匹配信号" items={dimension.signals} />
           ) : null}
           {dimension.red_flags && dimension.red_flags.length > 0 ? (
-            <EvidenceList label="Red flags" items={dimension.red_flags} />
+            <EvidenceList label="风险信号" items={dimension.red_flags} />
           ) : null}
         </article>
       ))}
@@ -314,11 +314,11 @@ function JobForm({
   return (
     <form className="stack" onSubmit={onSubmit}>
       <label>
-        JD title
+        岗位名称
         <input value={title} onChange={(event) => onTitleChange(event.target.value)} required />
       </label>
       <label>
-        JD description
+        职位描述
         <textarea
           value={description}
           onChange={(event) => onDescriptionChange(event.target.value)}
@@ -327,27 +327,27 @@ function JobForm({
         />
       </label>
       <label>
-        Region
+        工作地区
         <input value={region} onChange={(event) => onRegionChange(event.target.value)} />
       </label>
       <label>
-        Target profile
+        目标画像
         <textarea
           value={targetProfile}
           onChange={(event) => onTargetProfileChange(event.target.value)}
         />
       </label>
       <label>
-        Red flags
+        排除条件
         <textarea value={redFlags} onChange={(event) => onRedFlagsChange(event.target.value)} />
       </label>
       <label>
-        Search notes
+        搜索要点
         <textarea value={searchNotes} onChange={(event) => onSearchNotesChange(event.target.value)} />
       </label>
       <SearchChannelField value={searchChannels} onChange={onSearchChannelsChange} />
       <button className="primary-action" type="submit" disabled={isSaving || jobsBlockedByStorage}>
-        Save Job
+        保存岗位
       </button>
     </form>
   );
@@ -375,7 +375,7 @@ function SearchChannelField({
 }) {
   return (
     <fieldset className="channel-fieldset">
-      <legend>Search channels</legend>
+      <legend>搜索渠道</legend>
       <div className="channel-option-list">
         {SEARCH_CHANNEL_OPTIONS.map((channel) => (
           <label key={channel.value} className="checkbox-row">

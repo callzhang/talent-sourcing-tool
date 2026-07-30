@@ -24,24 +24,26 @@ REQUIRED_REVIEW_FIELDS = {
 }
 
 
-REVIEW_PROMPT = """You are running a file-protocol candidate review in this workspace.
-Read input.json for the review job, candidate, job, and rubric payload.
-Follow review.schema.json exactly for the output contract.
-Use profile_data.raw.signals, profile_data.raw.risks, and public profile fields as evidence.
-Score 85-100 for strong_proceed, 70-84 for proceed, 55-69 for borderline, and below 55 for pass.
-Penalize candidates who are GTM-only, platform-only, consulting-heavy, or lack hands-on AI prototype evidence.
-For each dimension_scores item with score below 70, include reason_code using one of:
+REVIEW_PROMPT = """你正在此工作区执行候选人评审。
+从 input.json 读取评审任务、候选人、岗位和评分标准。
+严格遵循 review.schema.json 的输出合同。
+使用 profile_data.raw.signals、profile_data.raw.risks 和公开资料字段作为证据。
+strong_proceed 评为 85-100 分，proceed 为 70-84 分，borderline 为 55-69 分，低于 55 分为 pass。
+对只做 GTM、只做平台、咨询经历过重或缺少亲自完成 AI 原型证据的候选人降分。
+每个分数低于 70 的 dimension_scores 项必须使用以下之一填写 reason_code：
 weak_builder_evidence, insufficient_ai_native_signal, too_enterprise_sales_oriented,
 platform_only_background, solutions_architecture_mismatch, consulting_heavy_profile,
-or insufficient_public_evidence.
-Then write review.json in this current workspace as a single JSON object.
-Do not write directly to any database or modify files other than review.json."""
+或 insufficient_public_evidence。
+所有面向 HR 的文本字段必须使用简体中文；JSON 字段名、recommendation 和 reason_code 保持 schema 中的英文值。
+然后在当前工作区写入一个单独 JSON 对象 review.json。
+不要直接写数据库，也不要修改 review.json 以外的文件。"""
 
 
-OPENAI_REVIEW_PROMPT = """You are an expert recruiting analyst for a high-signal sourcing workflow.
-Produce exactly one JSON object that follows review.schema.json.
-Use only evidence available in input.json. Do not invent private history.
-If evidence is thin or ambiguous, score conservatively and explain the uncertainty."""
+OPENAI_REVIEW_PROMPT = """你是负责高质量人才搜索流程的资深招聘分析师。
+只输出一个严格符合 review.schema.json 的 JSON 对象。
+只能使用 input.json 中已有的证据，不得虚构个人经历。
+若证据不足或存在歧义，保守评分并说明不确定性。
+所有给 HR 阅读的文本字段必须使用简体中文；JSON 字段名、recommendation 和 reason_code 保持 schema 规定的英文值。"""
 
 
 class ReviewOutput(BaseModel):
@@ -198,7 +200,7 @@ class OpenAIReviewWorker:
                         "content": (
                             f"review.schema.json:\n{schema_json}\n\n"
                             f"input.json:\n{input_json}\n\n"
-                            "Return only the JSON object."
+                            "只返回 JSON 对象。"
                         ),
                     },
                 ],

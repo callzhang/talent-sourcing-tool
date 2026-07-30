@@ -41,7 +41,7 @@ export function SearchPage({
   const [channels, setChannels] = useState<SearchChannel[]>([]);
   const [runs, setRuns] = useState<SearchRun[]>([]);
   const [runDetails, setRunDetails] = useState<Record<string, SearchRunDetail>>({});
-  const [status, setStatus] = useState("Choose a JD and create a search run.");
+  const [status, setStatus] = useState("请选择岗位后创建搜索任务。");
   const [isSearching, setIsSearching] = useState(false);
   const startedRunIds = useRef(new Set<string>());
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null;
@@ -96,7 +96,7 @@ export function SearchPage({
       })
       .catch((error: unknown) => {
         if (!ignore) {
-          setStatus(error instanceof Error ? error.message : "Unable to load search runs.");
+          setStatus(error instanceof Error ? error.message : "无法加载搜索任务历史。");
         }
       });
     return () => {
@@ -138,10 +138,10 @@ export function SearchPage({
     );
     if (detail.status === "completed") {
       onCandidatesFound(detail.candidates);
-      setStatus(`Search completed with ${detail.candidates.length} candidates.`);
+      setStatus(`搜索完成，找到 ${detail.candidates.length} 位候选人。`);
       setIsSearching(false);
     } else if (detail.status === "failed") {
-      setStatus(searchRunError(detail) || "Search failed. Review the run history for details.");
+      setStatus(searchRunError(detail) || "搜索失败，请在搜索历史中查看详情。");
       setIsSearching(false);
     }
   }
@@ -155,7 +155,7 @@ export function SearchPage({
       .runSearchRun(searchRunId)
       .then(applyRunDetail)
       .catch((error: unknown) => {
-        setStatus(error instanceof Error ? error.message : "Unable to run search.");
+        setStatus(error instanceof Error ? error.message : "无法执行搜索任务。");
         setIsSearching(false);
       });
   }
@@ -163,21 +163,21 @@ export function SearchPage({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedJobId) {
-      setStatus("Create or select a JD before searching.");
+      setStatus("请先创建或选择岗位。");
       return;
     }
     if (searchBlockedByStorage) {
       setStatus(
-        "Search is disabled in this deployment until production storage is configured."
+        "当前生产环境未配置持久化数据库，无法搜索。"
       );
       return;
     }
     if (channels.length === 0) {
-      setStatus("No search channels are available in the current deployment.");
+      setStatus("当前部署没有可用的搜索渠道。");
       return;
     }
     setIsSearching(true);
-    setStatus(`Running sourcing search on ${formatChannels(channels)}...`);
+    setStatus(`正在通过 ${formatChannels(channels)} 搜索候选人...`);
     try {
       const result = await api.createSearch({
         job_id: selectedJobId,
@@ -189,28 +189,28 @@ export function SearchPage({
         }
       });
       setRuns((current) => [result, ...current.filter((run) => run.id !== result.id)]);
-      setStatus(`Search run queued on ${formatChannels(result.channels)}.`);
+      setStatus(`搜索任务已进入队列：${formatChannels(result.channels)}。`);
       startRun(result.id);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to create search run.");
+      setStatus(error instanceof Error ? error.message : "无法创建搜索任务。");
     }
   }
 
   return (
     <section className="workspace-grid" aria-labelledby="search-heading">
       <div className="card card-form">
-        <p className="section-kicker">Sourcing</p>
-        <h2 id="search-heading">Search Runs</h2>
+        <p className="section-kicker">人才搜索</p>
+        <h2 id="search-heading">搜索任务</h2>
         <form className="stack" onSubmit={handleSubmit}>
           <label>
-            JD
+            岗位
             <select
               value={selectedJobId ?? ""}
               onChange={(event) => onSelectJob(event.target.value)}
               required
             >
               <option value="" disabled>
-                Select a JD
+                选择岗位
               </option>
               {jobs.map((job) => (
                 <option key={job.id} value={job.id}>
@@ -220,7 +220,7 @@ export function SearchPage({
             </select>
           </label>
           <label>
-            Search query
+            搜索条件
             <textarea
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -229,7 +229,7 @@ export function SearchPage({
             />
           </label>
           <label>
-            Candidate limit
+            候选人数量
             <input
               min="1"
               type="number"
@@ -243,16 +243,16 @@ export function SearchPage({
             availableChannels={availableChannels}
           />
           <div className="search-channel-summary" aria-live="polite">
-            <span className="detail-label">Searching Channels</span>
+            <span className="detail-label">搜索渠道</span>
             <strong>{formatChannels(channels)}</strong>
           </div>
           <div className="search-channel-summary">
-            <span className="detail-label">Region</span>
-            <strong>{selectedJob?.region.trim() || "No region specified"}</strong>
+            <span className="detail-label">工作地区</span>
+            <strong>{selectedJob?.region.trim() || "未设置工作地区"}</strong>
           </div>
           {searchBlockedByStorage ? (
             <p className="muted">
-              Search is blocked in production until durable database storage is configured.
+              当前生产环境未配置持久化数据库，无法搜索。
             </p>
           ) : null}
           <button
@@ -260,21 +260,21 @@ export function SearchPage({
             type="submit"
             disabled={isSearching || channels.length === 0 || searchBlockedByStorage}
           >
-            Create search run
+            创建搜索任务
           </button>
         </form>
         <p className="muted">{status}</p>
       </div>
 
       <div className="card">
-        <p className="section-kicker">Run history</p>
-        <h3>{runs.length} persisted runs</h3>
+        <p className="section-kicker">搜索历史</p>
+        <h3>{runs.length} 条已保存记录</h3>
         <div className="job-list">
           {runs.map((run) => (
             <article key={run.id} className="list-row static-row">
               <strong>{run.query}</strong>
               <span>
-                {run.status} · {run.candidate_count} candidates
+                {searchRunStatusLabel(run.status)} · {run.candidate_count} 位候选人
               </span>
               <span>{formatRunRegion(run.params)}</span>
               <span>{run.channels.map(channelLabel).join(" + ")}</span>
@@ -301,6 +301,17 @@ function searchRunError(detail: SearchRunDetail): string | null {
   return typeof errorMessage === "string" && errorMessage.length > 0 ? errorMessage : null;
 }
 
+function searchRunStatusLabel(status: string): string {
+  return (
+    {
+      pending: "等待执行",
+      running: "正在搜索",
+      completed: "已完成",
+      failed: "失败"
+    }[status] ?? status
+  );
+}
+
 function RunProgress({ progress = {} }: { progress?: Record<string, unknown> }) {
   const worker = typeof progress.worker === "number" ? progress.worker : 1;
   const completed = typeof progress.completed_channels === "number" ? progress.completed_channels : 0;
@@ -308,8 +319,8 @@ function RunProgress({ progress = {} }: { progress?: Record<string, unknown> }) 
   const active = typeof progress.active_channel === "string" ? progress.active_channel : null;
 
   return (
-    <span className="run-progress" aria-label={`Worker ${worker}; ${completed} of ${total} channels complete`}>
-      Worker {worker} · {completed}/{total} channels
+    <span className="run-progress" aria-label={`执行器 ${worker}；已完成 ${completed}/${total} 个渠道`}>
+      执行器 {worker} · 已完成 {completed}/{total} 个渠道
       {active ? ` · ${channelLabel(active)}` : ""}
     </span>
   );
@@ -326,7 +337,7 @@ function SearchChannelField({
 }) {
   return (
     <fieldset className="channel-fieldset">
-      <legend>Search channels</legend>
+      <legend>搜索渠道</legend>
       <div className="channel-option-list">
         {SEARCH_CHANNEL_OPTIONS.map((channel) => (
           <label key={channel.value} className="checkbox-row">
@@ -339,7 +350,7 @@ function SearchChannelField({
             <span className="channel-option-label">
               {channel.label}
               {!availableChannels.includes(channel.value) ? (
-                <span className="channel-option-state">Unavailable</span>
+                <span className="channel-option-state">暂不可用</span>
               ) : null}
             </span>
           </label>
@@ -372,14 +383,14 @@ function channelLabel(channel: string): string {
 function formatChannels(channels: string[]): string {
   const labels = channels.map(channelLabel);
   if (labels.length === 0) {
-    return "No channels selected";
+    return "未选择渠道";
   }
   return labels.join(" + ");
 }
 
 function formatRunRegion(params: Record<string, unknown> = {}): string {
   const region = typeof params.region === "string" ? params.region.trim() : "";
-  return region || "No region specified";
+  return region || "未设置工作地区";
 }
 
 function searchQueryForJob(job: Job | null): string {
@@ -441,11 +452,11 @@ function RunCandidates({
           key={candidate.id}
           type="button"
           className="text-action run-candidate-row"
-          aria-label={`Open ${candidate.name}`}
+          aria-label={`查看 ${candidate.name}`}
           onClick={() => onReviewCandidate(candidate)}
         >
           <strong>{candidate.name}</strong>
-          <span>{candidate.headline ?? "No headline captured"}</span>
+          <span>{candidate.headline ?? "未获取简介"}</span>
         </button>
       ))}
     </div>

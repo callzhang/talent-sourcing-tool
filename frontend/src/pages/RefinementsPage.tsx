@@ -11,7 +11,7 @@ type RefinementsPageProps = {
 
 export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: RefinementsPageProps) {
   const [suggestions, setSuggestions] = useState<RefinementSuggestion[]>([]);
-  const [status, setStatus] = useState("Select a JD to inspect persisted refinements.");
+  const [status, setStatus] = useState("请选择岗位以查看已保存的优化建议。");
 
   useEffect(() => {
     if (!selectedJobId) {
@@ -26,14 +26,14 @@ export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: Refinement
           setSuggestions(loadedSuggestions);
           setStatus(
             loadedSuggestions.length > 0
-              ? "Persisted suggestions from pass reasons."
-              : "No refinement suggestions yet."
+              ? "已根据淘汰原因生成优化建议。"
+              : "暂无优化建议。"
           );
         }
       })
       .catch((error: unknown) => {
         if (!ignore) {
-          setStatus(error instanceof Error ? error.message : "Unable to load refinements.");
+          setStatus(error instanceof Error ? error.message : "无法加载优化建议。");
         }
       });
     return () => {
@@ -44,16 +44,16 @@ export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: Refinement
   return (
     <section className="workspace-grid" aria-labelledby="refinements-heading">
       <div className="card">
-        <p className="section-kicker">Feedback loop</p>
-        <h2 id="refinements-heading">Refinement Suggestions</h2>
+        <p className="section-kicker">反馈闭环</p>
+        <h2 id="refinements-heading">岗位优化建议</h2>
         <label>
-          JD
+          岗位
           <select
             value={selectedJobId ?? ""}
             onChange={(event) => onSelectJob(event.target.value)}
           >
             <option value="" disabled>
-              Select a JD
+              选择岗位
             </option>
             {jobs.map((job) => (
               <option key={job.id} value={job.id}>
@@ -76,7 +76,7 @@ export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: Refinement
             </article>
           ))}
           {suggestions.length === 0 ? (
-            <p className="empty-state">Pass a candidate with a reason to generate a refinement suggestion.</p>
+            <p className="empty-state">淘汰候选人时填写原因，即可生成岗位优化建议。</p>
           ) : null}
         </div>
       </div>
@@ -87,7 +87,7 @@ export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: Refinement
 function reasonCodes(suggestion: RefinementSuggestion) {
   const reasonCodesValue = suggestion.suggestion_metadata.reason_codes;
   if (!Array.isArray(reasonCodesValue) || reasonCodesValue.length === 0) {
-    return "No reason code metadata";
+    return "未记录原因代码";
   }
   return reasonCodesValue.map(String).join(", ");
 }

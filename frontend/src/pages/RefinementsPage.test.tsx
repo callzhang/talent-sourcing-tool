@@ -43,7 +43,7 @@ it("renders persisted refinement suggestions with reason-code metadata", async (
     />
   );
 
-  expect(await screen.findByText("Persisted suggestions from pass reasons.")).toBeInTheDocument();
+  expect(await screen.findByText("已根据淘汰原因生成优化建议。")).toBeInTheDocument();
   expect(
     screen.getByText("Search for AI prototype builders with public launch evidence.")
   ).toBeInTheDocument();
@@ -66,7 +66,7 @@ it("handles no selected JD, empty results, and load errors", async () => {
     />
   );
 
-  expect(screen.getByText("Select a JD to inspect persisted refinements.")).toBeInTheDocument();
+  expect(screen.getByText("请选择岗位以查看已保存的优化建议。")).toBeInTheDocument();
   expect(fetchMock).not.toHaveBeenCalled();
 
   rerender(
@@ -76,9 +76,9 @@ it("handles no selected JD, empty results, and load errors", async () => {
       onSelectJob={() => undefined}
     />
   );
-  expect(await screen.findByText("No refinement suggestions yet.")).toBeInTheDocument();
+  expect(await screen.findByText("暂无优化建议。")).toBeInTheDocument();
   expect(
-    screen.getByText("Pass a candidate with a reason to generate a refinement suggestion.")
+    screen.getByText("淘汰候选人时填写原因，即可生成岗位优化建议。")
   ).toBeInTheDocument();
 
   rerender(
@@ -123,7 +123,7 @@ it("keeps refinement metadata rendering safe when reason codes are missing", asy
   );
 
   expect(await screen.findByText("Clarify required portfolio evidence.")).toBeInTheDocument();
-  expect(screen.getByText("No reason code metadata")).toBeInTheDocument();
+  expect(screen.getByText("未记录原因代码")).toBeInTheDocument();
 });
 
 it("selects a different JD from the refinement filter", () => {
@@ -137,7 +137,7 @@ it("selects a different JD from the refinement filter", () => {
     />
   );
 
-  fireEvent.change(screen.getByLabelText("JD"), {
+  fireEvent.change(screen.getByLabelText("岗位"), {
     target: { value: "job_2" }
   });
 

@@ -16,7 +16,7 @@ def test_rubric_includes_product_and_market_discovery_for_all_jobs():
         )
     )
 
-    assert "Product and Market Discovery Judgment" in names
+    assert "产品与市场探索判断" in names
 
 
 def test_rubric_does_not_branch_on_pmm_marketing_terms():
@@ -28,5 +28,5 @@ def test_rubric_does_not_branch_on_pmm_marketing_terms():
         )
     )
 
-    assert "Product Marketing Judgment" not in names
-    assert "Product and Market Discovery Judgment" in names
+    assert "产品营销判断" not in names
+    assert "产品与市场探索判断" in names

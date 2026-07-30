@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const job = {
   id: "job_1",
-  title: "Founding PMM",
+  title: "美国市场产品营销负责人",
   description: "Own positioning and customer evidence.",
   region: "San Francisco, CA",
   target_profile_text: "",
@@ -84,7 +84,7 @@ test("HR layout: Search channel controls stay aligned at desktop and mobile widt
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await page.getByRole("button", { name: "搜索", exact: true }).click();
 
   const channels = page.locator(".channel-option-list");
   await expect(channels).toBeVisible();

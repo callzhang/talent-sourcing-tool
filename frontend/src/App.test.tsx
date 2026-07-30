@@ -49,11 +49,11 @@ it("renders the app shell on the jobs tab", () => {
   render(<App />);
 
   expect(screen.getByRole("banner")).toBeInTheDocument();
-  expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Talent Sourcing Tool" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Job listings" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "New Job" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Jobs" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("navigation", { name: "主导航" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "人才搜索与评估" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "岗位列表" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "新建岗位" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "岗位" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.queryByText("Local sourcing workspace")).not.toBeInTheDocument();
 });
 
@@ -154,7 +154,7 @@ it("keeps deployment status out of the HR workspace", async () => {
 
   render(<App />);
 
-  expect(await screen.findByRole("heading", { name: "Talent Sourcing Tool" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "人才搜索与评估" })).toBeInTheDocument();
   expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Deployment readiness" })).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Delivery handoff" })).not.toBeInTheDocument();
@@ -165,10 +165,10 @@ it("switches between shell tabs without routing dependencies", () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
   render(<App />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  fireEvent.click(screen.getByRole("button", { name: "搜索" }));
 
-  expect(screen.getByRole("heading", { name: "Search Runs" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Search" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("heading", { name: "搜索任务" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "搜索" })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("opens refinements and ignores late job loads after unmount", async () => {
@@ -216,8 +216,8 @@ it("opens refinements and ignores late job loads after unmount", async () => {
 
   const { unmount } = render(<App />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Refinements" }));
-  expect(screen.getByRole("heading", { name: "Refinement Suggestions" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "岗位优化" }));
+  expect(screen.getByRole("heading", { name: "岗位优化建议" })).toBeInTheDocument();
 
   unmount();
   resolveJobs(await jsonResponse([jobWithRubric.job]));
@@ -309,22 +309,22 @@ it("creates a job, displays its rubric, and uses it for search and candidates", 
 
   render(<App />);
 
-  fireEvent.click(screen.getByRole("button", { name: "New Job" }));
-  fireEvent.change(await screen.findByLabelText("JD title"), {
+  fireEvent.click(screen.getByRole("button", { name: "新建岗位" }));
+  fireEvent.change(await screen.findByLabelText("岗位名称"), {
     target: { value: "Founding PMM" }
   });
-  fireEvent.change(screen.getByLabelText("JD description"), {
+  fireEvent.change(screen.getByLabelText("职位描述"), {
     target: { value: "Own positioning for AI launch." }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Save Job" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存岗位" }));
 
   expect(await screen.findByText("Founder-market judgment")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Search" }));
-  fireEvent.change(await screen.findByLabelText("Search query"), {
+  fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+  fireEvent.change(await screen.findByLabelText("搜索条件"), {
     target: { value: "AI product marketer" }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Create search run" }));
+  fireEvent.click(screen.getByRole("button", { name: "创建搜索任务" }));
 
   expect(await screen.findByText("Searched Candidate")).toBeInTheDocument();
 });
@@ -403,17 +403,17 @@ it("starts review, drafts a pass reason, and submits pass feedback", async () =>
 
   render(<App />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "Candidates" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Review Searched Candidate" }));
+  fireEvent.click(await screen.findByRole("button", { name: "候选人" }));
+  fireEvent.click(await screen.findByRole("button", { name: "评审 Searched Candidate" }));
   expect(
     await screen.findByText(
-      "AI review is unavailable in this deployment until production review config is completed."
+      "当前部署尚未完成生产评审配置，暂时无法使用 AI 评审。"
     )
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Start AI review" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "开始 AI 评审" })).toBeDisabled();
 
-  fireEvent.click(screen.getByRole("button", { name: "Back to candidates" }));
-  expect(await screen.findByRole("heading", { name: "Candidates" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "返回候选人" }));
+  expect(await screen.findByRole("heading", { name: "候选人" })).toBeInTheDocument();
 });
 
 const jobWithRubric = {

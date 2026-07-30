@@ -149,8 +149,8 @@ def test_suggest_refinements_creates_traceable_suggestion_for_any_recorded_reaso
         {
             "suggestion_type": "feedback_review",
             "suggestion_text": (
-                "Review the JD rubric and sourcing query against this recorded pass reason "
-                "(insufficient_role_evidence): No founding product marketing evidence was established."
+                "请结合以下已记录的淘汰原因，复核 JD 评分标准和搜索条件 "
+                "（insufficient_role_evidence）：No founding product marketing evidence was established."
             ),
             "reason_codes": ["insufficient_role_evidence"],
         }
