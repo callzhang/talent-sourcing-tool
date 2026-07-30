@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
+import json
 from typing import Any, Protocol
-from urllib.parse import quote_plus, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qs, quote_plus, urlencode, urlsplit, urlunsplit
 from xml.etree import ElementTree
 
 import httpx
@@ -346,7 +348,7 @@ class LiveSourcingConnector:
         )
         response.raise_for_status()
         payload = response.json()
-        organic = payload.get("organic", [])
+        organic = brightdata_organic_results(payload)
         return serp_results_to_candidates(organic, query, region, channel)[:limit]
 
 
@@ -467,6 +469,83 @@ def serp_results_to_candidates(
             )
         )
     return candidates
+
+
+def brightdata_organic_results(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        raise SourcingConfigError("Bright Data returned an unsupported response payload.")
+
+    organic = payload.get("organic")
+    if isinstance(organic, list):
+        return [item for item in organic if isinstance(item, dict)]
+
+    upstream_status = payload.get("status_code")
+    if isinstance(upstream_status, int) and upstream_status >= 400:
+        raise SourcingConfigError(
+            f"Bright Data request failed with upstream status {upstream_status}. "
+            "Check the selected zone access settings."
+        )
+
+    body = payload.get("body")
+    if not isinstance(body, str) or not body.strip():
+        return []
+
+    try:
+        nested_payload = json.loads(body)
+    except json.JSONDecodeError:
+        return google_html_to_organic_results(body)
+
+    if isinstance(nested_payload, dict) and isinstance(nested_payload.get("organic"), list):
+        return [item for item in nested_payload["organic"] if isinstance(item, dict)]
+    return google_html_to_organic_results(body)
+
+
+class GoogleResultParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.results: list[dict[str, str]] = []
+        self._anchor_href: str | None = None
+        self._anchor_text: list[str] = []
+        self._anchor_has_heading = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a" and self._anchor_href is None:
+            self._anchor_href = dict(attrs).get("href")
+            self._anchor_text = []
+            self._anchor_has_heading = False
+        elif tag == "h3" and self._anchor_href is not None:
+            self._anchor_has_heading = True
+
+    def handle_data(self, data: str) -> None:
+        if self._anchor_href is not None:
+            self._anchor_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != "a" or self._anchor_href is None:
+            return
+        url = google_result_url(self._anchor_href)
+        title = " ".join(part.strip() for part in self._anchor_text if part.strip())
+        if self._anchor_has_heading and url and title:
+            self.results.append({"link": url, "title": title, "description": ""})
+        self._anchor_href = None
+        self._anchor_text = []
+        self._anchor_has_heading = False
+
+
+def google_html_to_organic_results(body: str) -> list[dict[str, str]]:
+    parser = GoogleResultParser()
+    parser.feed(body)
+    parser.close()
+    return parser.results
+
+
+def google_result_url(value: str) -> str | None:
+    parsed = urlsplit(value)
+    if value.startswith("/url?"):
+        return string_or_none(parse_qs(parsed.query).get("q", [None])[0])
+    if parsed.scheme in {"http", "https"} and parsed.netloc and not parsed.netloc.endswith("google.com"):
+        return value
+    return None
 
 
 def infer_name_from_title(value: str) -> str:

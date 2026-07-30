@@ -484,6 +484,80 @@ def test_live_sourcing_connector_ignores_proxy_environment():
     assert connector.client.trust_env is False
 
 
+def test_brightdata_search_parses_google_html_from_request_api_response():
+    from app.services.sourcing import LiveSourcingConnector
+
+    class BrightDataSettings:
+        sourcing_provider = "live"
+        exa_api_key = ""
+        brightdata_api_key = "bright-key"
+        brightdata_zone = "mcp_unlocker"
+
+    class FakeResponse:
+        def raise_for_status(self):  # noqa: ANN201
+            return None
+
+        def json(self):  # noqa: ANN201
+            return {
+                "status_code": 200,
+                "body": (
+                    '<a href="/url?q=https://www.linkedin.com/in/example-pmm&sa=U">'
+                    "<h3>Example PMM - AI Startup</h3></a>"
+                ),
+            }
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.request_json = None
+
+        def post(self, url, headers, json):  # noqa: ANN001, ANN201
+            self.request_json = json
+            return FakeResponse()
+
+    client = FakeClient()
+    connector = LiveSourcingConnector(BrightDataSettings(), client=client)
+
+    results = connector.search_people(
+        "founding product marketing",
+        {"channels": ["brightdata_discover"], "limit": 1, "region": "San Francisco, CA"},
+    )
+
+    assert client.request_json["zone"] == "mcp_unlocker"
+    assert client.request_json["country"] == "us"
+    assert len(results) == 1
+    assert results[0].profile_url == "https://www.linkedin.com/in/example-pmm"
+    assert results[0].profile_source == "brightdata_discover"
+
+
+def test_brightdata_search_rejects_upstream_error_instead_of_returning_empty_results():
+    from app.services.sourcing import LiveSourcingConnector, SourcingConfigError
+
+    class BrightDataSettings:
+        sourcing_provider = "live"
+        exa_api_key = ""
+        brightdata_api_key = "bright-key"
+        brightdata_zone = "mcp_unlocker"
+
+    class FakeResponse:
+        def raise_for_status(self):  # noqa: ANN201
+            return None
+
+        def json(self):  # noqa: ANN201
+            return {"status_code": 401, "headers": {"x-brd-err-msg": "sensitive detail"}}
+
+    class FakeClient:
+        def post(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+            return FakeResponse()
+
+    connector = LiveSourcingConnector(BrightDataSettings(), client=FakeClient())
+
+    with pytest.raises(SourcingConfigError, match="upstream status 401"):
+        connector.search_people(
+            "founding product marketing",
+            {"channels": ["brightdata_discover"], "limit": 1},
+        )
+
+
 def test_canonical_profile_url_preserves_query_for_non_linkedin_profiles():
     from app.services.sourcing import canonical_profile_url
 
