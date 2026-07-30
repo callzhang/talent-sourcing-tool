@@ -19,6 +19,15 @@ def load_script_module(name: str, relative_path: str):
     return module
 
 
+def test_ci_runs_live_hr_e2e_only_through_a_job_environment_variable():
+    workflow = (REPO_ROOT / ".github/workflows/validate.yml").read_text()
+
+    assert "if: ${{ secrets.TALENT_OPENAI_API_KEY != '' }}" not in workflow
+    assert "TALENT_OPENAI_API_KEY: ${{ secrets.TALENT_OPENAI_API_KEY }}" in workflow
+    assert "if: ${{ env.TALENT_OPENAI_API_KEY != '' }}" in workflow
+    assert "if: ${{ env.TALENT_OPENAI_API_KEY == '' }}" in workflow
+
+
 def test_prepare_vercel_env_resolves_aliases_and_renders_plan():
     module = load_script_module("prepare_vercel_env", "scripts/prepare_vercel_env.py")
 

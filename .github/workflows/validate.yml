@@ -49,8 +49,9 @@ jobs:
         run: npm --prefix frontend run build
 
   hr-e2e:
-    if: ${{ secrets.TALENT_OPENAI_API_KEY != '' }}
     runs-on: ubuntu-latest
+    env:
+      TALENT_OPENAI_API_KEY: ${{ secrets.TALENT_OPENAI_API_KEY }}
 
     steps:
       - name: Checkout
@@ -78,10 +79,14 @@ jobs:
         run: npm --prefix frontend run test:e2e:install
 
       - name: Run local HR flow E2E
+        if: ${{ env.TALENT_OPENAI_API_KEY != '' }}
         env:
           TALENT_REVIEW_PROVIDER: openai
-          TALENT_OPENAI_API_KEY: ${{ secrets.TALENT_OPENAI_API_KEY }}
         run: ./scripts/hr_e2e.sh
+
+      - name: Report skipped HR flow E2E
+        if: ${{ env.TALENT_OPENAI_API_KEY == '' }}
+        run: echo "Skipping live OpenAI HR E2E because TALENT_OPENAI_API_KEY is not configured."
 
   production-smoke:
     if: github.event_name == 'workflow_dispatch'
