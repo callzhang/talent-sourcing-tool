@@ -637,8 +637,7 @@ PLAYWRIGHT_BASE_URL=https://talent-sourcing-tool-zeta.vercel.app \
 它校验的是正式环境当前应有的 guardrail，而不是本地完整业务流。
 当前覆盖：
 
-- `Deployment readiness` 面板可见
-- Storage / AI review / Channel coverage 的缺口文案可见
+- HR 首屏不展示 `Deployment readiness` 或 `Delivery handoff` 运维面板
 - `New Job` 在 production 上按预期禁用
 - `Search` 页里 `LinkedIn` / `Exa` 可用，`Bright Data Discover` 禁用
 - `Create search run` 在缺持久化存储时保持禁用

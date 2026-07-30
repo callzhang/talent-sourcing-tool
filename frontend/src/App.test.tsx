@@ -54,10 +54,10 @@ it("renders the app shell on the jobs tab", () => {
   expect(screen.getByRole("heading", { name: "Job listings" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "New Job" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Jobs" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText("Local sourcing workspace")).toBeInTheDocument();
+  expect(screen.queryByText("Local sourcing workspace")).not.toBeInTheDocument();
 });
 
-it("shows the production workspace label when the app is running on vercel", async () => {
+it("keeps deployment status out of the HR workspace", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
     if (url.endsWith("/api/system/status")) {
@@ -154,41 +154,11 @@ it("shows the production workspace label when the app is running on vercel", asy
 
   render(<App />);
 
-  expect(await screen.findByText("Production sourcing workspace")).toBeInTheDocument();
-  const operationalStatus = screen.getByRole("group");
-  expect(operationalStatus).not.toHaveAttribute("open");
-  expect(screen.getByRole("region", { name: "Deployment readiness" })).not.toBeVisible();
-
-  fireEvent.click(screen.getByText("Operational status").closest("summary")!);
-
-  expect(operationalStatus).toHaveAttribute("open");
-  expect(screen.getByRole("region", { name: "Deployment readiness" })).toBeVisible();
-  expect(screen.getByText("Hard blockers")).toBeInTheDocument();
-  expect(screen.getByText("Optional degradations")).toBeInTheDocument();
-  expect(
-    screen.getByText("Missing: DATABASE_URL, TALENT_DATABASE_URL")
-  ).toBeInTheDocument();
-  expect(
-    screen.getByText(/Missing vars: DATABASE_URL, TALENT_DATABASE_URL/)
-  ).toBeInTheDocument();
-  expect(
-    screen.getByText(/Bright Data: Bright Data API key exists but is expired\./)
-  ).toBeInTheDocument();
-  expect(
-    screen
-      .getByRole("region", { name: "System warnings" })
-      .querySelector("li:last-child")
-  ).toBeInTheDocument();
-  expect(
-    screen.getByRole("region", { name: "System warnings" }).textContent
-  ).toContain("AI review is not configured for deployment. Set TALENT_OPENAI_API_KEY.");
-  expect(screen.getByRole("link", { name: "https://talent-sourcing-tool-zeta.vercel.app" })).toHaveAttribute(
-    "href",
-    "https://talent-sourcing-tool-zeta.vercel.app"
-  );
-  expect(screen.getByText("docs/production-owner-checklist.md")).toBeInTheDocument();
-  expect(screen.getByText("python3 scripts/prepare_vercel_env.py --strict")).toBeInTheDocument();
-  expect(screen.getByText("TALENT_DATABASE_URL 由谁提供")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Talent Sourcing Tool" })).toBeInTheDocument();
+  expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Deployment readiness" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Delivery handoff" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "System warnings" })).not.toBeInTheDocument();
 });
 
 it("switches between shell tabs without routing dependencies", () => {
@@ -432,12 +402,6 @@ it("starts review, drafts a pass reason, and submits pass feedback", async () =>
   });
 
   render(<App />);
-
-  expect(
-    await screen.findByText(
-      "Production is using temporary SQLite storage on /tmp. Configure DATABASE_URL for durable state."
-    )
-  ).toBeInTheDocument();
 
   fireEvent.click(await screen.findByRole("button", { name: "Candidates" }));
   fireEvent.click(await screen.findByRole("button", { name: "Review Searched Candidate" }));

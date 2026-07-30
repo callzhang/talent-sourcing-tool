@@ -89,11 +89,6 @@ export function App() {
     setPage("candidate-detail");
   }
 
-  const workspaceLabel =
-    systemStatus?.environment === "vercel"
-      ? "Production sourcing workspace"
-      : "Local sourcing workspace";
-
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -119,66 +114,8 @@ export function App() {
           </nav>
         </div>
         <div className="workspace-context">
-          <div>
-            <p className="eyebrow">{workspaceLabel}</p>
-            <h1>Talent Sourcing Tool</h1>
-          </div>
-          {systemStatus ? (
-            <DeploymentReadinessPanel
-              systemStatus={systemStatus}
-              providerChecks={providerChecks}
-            />
-          ) : null}
+          <h1>Talent Sourcing Tool</h1>
         </div>
-        {systemStatus &&
-        (systemStatus.warnings.length > 0 ||
-          (systemStatus.hard_blockers?.length ?? 0) > 0 ||
-          (systemStatus.optional_degradations?.length ?? 0) > 0) ? (
-          <section className="status-banner" aria-label="System warnings">
-            <strong>
-              {systemStatus.environment === "vercel"
-                ? "Deployment configuration warnings"
-                : "Environment warnings"}
-            </strong>
-            {systemStatus.warnings.length > 0 ? (
-              <ul>
-                {systemStatus.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            ) : null}
-            {systemStatus.hard_blockers && systemStatus.hard_blockers.length > 0 ? (
-              <div className="status-detail-group">
-                <strong>Hard blockers</strong>
-                <ul>
-                  {systemStatus.hard_blockers.map((blocker) => (
-                    <li key={blocker.code}>
-                      {blocker.message}
-                      {blocker.env_vars && blocker.env_vars.length > 0
-                        ? ` Missing vars: ${blocker.env_vars.join(", ")}`
-                        : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {systemStatus.optional_degradations && systemStatus.optional_degradations.length > 0 ? (
-              <div className="status-detail-group">
-                <strong>Optional degradations</strong>
-                <ul>
-                  {systemStatus.optional_degradations.map((degradation) => (
-                    <li key={degradation.code}>
-                      {degradation.message}
-                      {degradation.env_vars && degradation.env_vars.length > 0
-                        ? ` Missing vars: ${degradation.env_vars.join(", ")}`
-                        : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
       </header>
 
       {page === "jobs" ? (
