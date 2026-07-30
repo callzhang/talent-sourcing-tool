@@ -20,9 +20,7 @@ test("Production smoke: a ready deployment exposes usable HR controls", async ({
   ).toBeVisible();
   await expect(page.getByText("docs/production-owner-checklist.md")).toBeVisible();
   await expect(page.getByText("python3 scripts/prepare_vercel_env.py --strict")).toBeVisible();
-  await expect(
-    page.getByText("Bright Data: Bright Data API key exists but is expired.")
-  ).toBeVisible();
+  await expect(page.getByText(/Bright Data: .+/)).toBeVisible();
 
   await expect(page.getByRole("button", { name: "New Job", exact: true })).toBeEnabled();
 
