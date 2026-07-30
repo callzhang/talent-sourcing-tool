@@ -119,6 +119,9 @@ test("HR flow: create job, search candidate, review, and submit decision", async
   await page.getByRole("button", { name: "Submit pass", exact: true }).click();
 
   await expect(page.getByText("Saved pass decision.")).toBeVisible();
+  await page.getByRole("button", { name: "Refinements", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Refinement Suggestions" })).toBeVisible();
+  await expect(page.getByText("Persisted suggestions from pass reasons.")).toBeVisible();
 });
 
 async function setChannel(page: Page, label: string, checked: boolean) {

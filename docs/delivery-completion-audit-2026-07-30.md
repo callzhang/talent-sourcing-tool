@@ -195,7 +195,7 @@
 - `/api/system/provider-checks` 显示 Exa 和 Bright Data 均可用；Bright Data 已启用 `mcp_unlocker` zone。
 - 使用正式站点的 Product Marketing 岗位，通过 Bright Data Discover 创建真实 search run，状态为 `completed`，并持久化 1 位候选人。
 - 该候选人已在正式站点完成 OpenAI review 并持久化；HR pass decision 成功关联 review 与候选人。复验发现 pass feedback 只对固定的旧岗位原因生成建议，现已改为基于任意已保存 HR 原因生成、按原因代码去重的待审阅建议。
-- `./scripts/hr_e2e.sh` 使用隔离数据库和真实 Codex review 跑通 HR 全流程：新建岗位、搜索候选人、查看详情、AI 初评和提交人工 pass decision。
+- `./scripts/hr_e2e.sh` 使用隔离数据库和真实 Codex review 跑通 HR 全流程：新建岗位、搜索候选人、查看详情、AI 初评、提交人工 pass decision，并确认 `Refinements` 显示持久化建议。
 - `PLAYWRIGHT_BASE_URL=https://talent-sourcing-tool-zeta.vercel.app npm --prefix frontend run test:e2e -- --grep 'Production smoke'` 通过。
 
 当前仅剩业务验收：Mina 在 HR 群明确确认功能完善可用。该确认前，系统保持可访问和可复验状态，但交付任务不标记为完成。
