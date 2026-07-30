@@ -132,6 +132,9 @@ it("opens a blank form from New Job and saves a new job", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "New Job" }));
   expect(screen.getByRole("heading", { name: "Job draft" })).toBeInTheDocument();
   expect(screen.queryByText("Founder-market judgment")).not.toBeInTheDocument();
+  const linkedInChannel = screen.getByRole("checkbox", { name: "LinkedIn" });
+  expect(linkedInChannel.closest("label")).toHaveClass("checkbox-row");
+  expect(linkedInChannel.nextElementSibling).toHaveClass("channel-option-label");
 
   fireEvent.change(screen.getByLabelText("JD title"), {
     target: { value: "AI Product Engineer" }

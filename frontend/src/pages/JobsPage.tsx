@@ -190,7 +190,7 @@ export function JobsPage({
             <p className="section-kicker">Active rubric</p>
             <div className="split-heading">
               <h3>{activeJob?.job.title ?? "No JD selected"}</h3>
-              <span>{activeJob ? `v${activeJob.rubric.version}` : "Draft"}</span>
+              {activeJob ? <span>{`v${activeJob.rubric.version}`}</span> : null}
             </div>
             <JobDetail job={activeJob} />
             <RubricPreview job={activeJob} />
@@ -384,7 +384,7 @@ function SearchChannelField({
               checked={value.includes(channel.value)}
               onChange={() => onChange(toggleChannel(value, channel.value))}
             />
-            <span>{channel.label}</span>
+            <span className="channel-option-label">{channel.label}</span>
           </label>
         ))}
       </div>

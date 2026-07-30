@@ -77,6 +77,9 @@ it("handles no selected JD, empty results, and load errors", async () => {
     />
   );
   expect(await screen.findByText("No refinement suggestions yet.")).toBeInTheDocument();
+  expect(
+    screen.getByText("Pass a candidate with a reason to generate a refinement suggestion.")
+  ).toBeInTheDocument();
 
   rerender(
     <RefinementsPage

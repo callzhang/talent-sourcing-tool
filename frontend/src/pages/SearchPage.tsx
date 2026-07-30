@@ -288,9 +288,11 @@ function SearchChannelField({
               disabled={!availableChannels.includes(channel.value)}
               onChange={() => onChange(toggleChannel(value, channel.value))}
             />
-            <span>
+            <span className="channel-option-label">
               {channel.label}
-              {!availableChannels.includes(channel.value) ? " (Unavailable)" : ""}
+              {!availableChannels.includes(channel.value) ? (
+                <span className="channel-option-state">Unavailable</span>
+              ) : null}
             </span>
           </label>
         ))}

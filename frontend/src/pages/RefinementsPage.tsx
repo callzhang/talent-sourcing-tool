@@ -75,6 +75,9 @@ export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: Refinement
               <span>{reasonCodes(suggestion)}</span>
             </article>
           ))}
+          {suggestions.length === 0 ? (
+            <p className="empty-state">Pass a candidate with a reason to generate a refinement suggestion.</p>
+          ) : null}
         </div>
       </div>
     </section>

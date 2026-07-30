@@ -256,7 +256,11 @@ it("disables unavailable deployment channels and blocks search when production s
   );
 
   expect(await screen.findByDisplayValue("Search configured from the JD")).toBeInTheDocument();
-  expect(screen.getByRole("checkbox", { name: /LinkedIn/ })).toBeDisabled();
+  const linkedInChannel = screen.getByRole("checkbox", { name: /LinkedIn/ });
+  expect(linkedInChannel).toBeDisabled();
+  expect(linkedInChannel.closest("label")).toHaveClass("checkbox-row");
+  expect(linkedInChannel.nextElementSibling).toHaveClass("channel-option-label");
+  expect(screen.getAllByText("Unavailable")).toHaveLength(3);
   expect(screen.getByRole("checkbox", { name: /Exa/ })).toBeDisabled();
   expect(screen.getByRole("checkbox", { name: /Bright Data Discover/ })).toBeDisabled();
   expect(screen.getByRole("checkbox", { name: /GitHub/ })).toBeChecked();
