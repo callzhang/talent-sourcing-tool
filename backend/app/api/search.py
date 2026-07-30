@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -215,7 +215,20 @@ def candidate_count_for_run(session: Session, search_run_id: str) -> int:
     )
 
 
-def read_search_run(session: Session, search_run: SearchRun) -> SearchRunRead:
+def candidate_counts_for_runs(session: Session, search_run_ids: list[str]) -> dict[str, int]:
+    if not search_run_ids:
+        return {}
+    rows = session.exec(
+        select(SearchResult.search_run_id, func.count(SearchResult.id))
+        .where(SearchResult.search_run_id.in_(search_run_ids))
+        .group_by(SearchResult.search_run_id)
+    ).all()
+    return {str(search_run_id): int(candidate_count) for search_run_id, candidate_count in rows}
+
+
+def read_search_run(
+    session: Session, search_run: SearchRun, *, candidate_count: int | None = None
+) -> SearchRunRead:
     return SearchRunRead(
         id=search_run.id,
         job_id=search_run.job_id,
@@ -225,7 +238,11 @@ def read_search_run(session: Session, search_run: SearchRun) -> SearchRunRead:
         status=search_run.status,
         params=search_run_params(search_run),
         progress=search_run_progress(search_run),
-        candidate_count=candidate_count_for_run(session, search_run.id),
+        candidate_count=(
+            candidate_count
+            if candidate_count is not None
+            else candidate_count_for_run(session, search_run.id)
+        ),
         created_at=search_run.created_at,
         completed_at=search_run.completed_at,
     )
@@ -239,7 +256,15 @@ def list_search_runs(
     if job_id is not None:
         statement = statement.where(SearchRun.job_id == job_id)
     search_runs = session.exec(statement).all()
-    return [read_search_run(session, search_run) for search_run in search_runs]
+    candidate_counts = candidate_counts_for_runs(session, [search_run.id for search_run in search_runs])
+    return [
+        read_search_run(
+            session,
+            search_run,
+            candidate_count=candidate_counts.get(search_run.id, 0),
+        )
+        for search_run in search_runs
+    ]
 
 
 @router.get("/{search_run_id}", response_model=SearchRunDetail)

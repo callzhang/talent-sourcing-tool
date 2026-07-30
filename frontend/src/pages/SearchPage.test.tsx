@@ -127,12 +127,18 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   );
 
   expect(await screen.findByText("existing ai pmm search")).toBeInTheDocument();
-  expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
   expect(screen.getAllByText("LinkedIn + GitHub + Exa + Bright Data Discover")).toHaveLength(2);
   expect(screen.getAllByText("San Francisco, CA")).toHaveLength(2);
   expect(screen.getAllByText("搜索渠道")).toHaveLength(2);
   expect(await screen.findByText("LinkedIn 失败：上游服务不可用")).toBeInTheDocument();
   expect(await screen.findByText("任务失败：LinkedIn upstream unavailable")).toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalledWith(
+    "/api/search/search_run_old",
+    expect.objectContaining({ method: "GET" })
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "查看本次候选人" }));
+  expect(await screen.findByText("Persisted Candidate")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("候选人数量"), {
     target: { value: "2" }

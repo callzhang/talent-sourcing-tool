@@ -82,16 +82,6 @@ export function SearchPage({
         if (!ignore) {
           setRuns(loadedRuns);
           setRunDetails({});
-          loadedRuns.forEach((run) => {
-            api
-              .getSearchRun(run.id)
-              .then((detail) => {
-                if (!ignore) {
-                  setRunDetails((current) => ({ ...current, [run.id]: detail }));
-                }
-              })
-              .catch(() => undefined);
-          });
         }
       })
       .catch((error: unknown) => {
@@ -144,6 +134,18 @@ export function SearchPage({
       setStatus(searchRunError(detail) || "搜索失败，请在搜索历史中查看详情。");
       setIsSearching(false);
     }
+  }
+
+  function loadRunDetails(searchRunId: string) {
+    if (runDetails[searchRunId]) {
+      return;
+    }
+    void api
+      .getSearchRun(searchRunId)
+      .then(applyRunDetail)
+      .catch((error: unknown) => {
+        setStatus(error instanceof Error ? error.message : "无法加载搜索任务详情。");
+      });
   }
 
   function startRun(searchRunId: string) {
@@ -279,6 +281,15 @@ export function SearchPage({
               <span>{formatRunRegion(run.params)}</span>
               <span>{run.channels.map(channelLabel).join(" + ")}</span>
               <RunProgress progress={run.progress} />
+              {run.candidate_count > 0 && !runDetails[run.id] ? (
+                <button
+                  className="text-action"
+                  type="button"
+                  onClick={() => loadRunDetails(run.id)}
+                >
+                  查看本次候选人
+                </button>
+              ) : null}
               <RunCandidates
                 candidates={runDetails[run.id]?.candidates ?? []}
                 onReviewCandidate={onReviewCandidate}
