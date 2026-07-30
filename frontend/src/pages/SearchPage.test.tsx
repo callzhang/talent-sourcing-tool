@@ -160,7 +160,7 @@ it("requires a selected JD before searching", () => {
 
 it("persists a queued run immediately and reports its worker progress", async () => {
   let resolveRun: (value: Response) => void = () => undefined;
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/search?job_id=job_1") && method === "GET") {
@@ -210,6 +210,12 @@ it("persists a queued run immediately and reports its worker progress", async ()
   expect(await screen.findByText("1 persisted runs")).toBeInTheDocument();
   expect(screen.getByText("pending · 0 candidates")).toBeInTheDocument();
   expect(screen.getByLabelText("Worker 1; 0 of 4 channels complete")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/search/search_run_new/run",
+      expect.objectContaining({ method: "POST" })
+    )
+  );
 
   resolveRun(
     await jsonResponse({

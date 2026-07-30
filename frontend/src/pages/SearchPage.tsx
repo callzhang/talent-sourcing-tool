@@ -52,6 +52,10 @@ export function SearchPage({
   const searchBlockedByStorage =
     systemStatus?.environment === "vercel" &&
     !systemStatus.capabilities.persistent_storage_configured;
+  const activeRunIdsKey = runs
+    .filter((run) => run.status === "pending" || run.status === "running")
+    .map((run) => run.id)
+    .join("|");
 
   useEffect(() => {
     setQuery(searchQueryForJob(selectedJob));
@@ -101,12 +105,10 @@ export function SearchPage({
   }, [selectedJobId]);
 
   useEffect(() => {
-    const activeRunIds = runs
-      .filter((run) => run.status === "pending" || run.status === "running")
-      .map((run) => run.id);
-    if (activeRunIds.length === 0) {
+    if (activeRunIdsKey.length === 0) {
       return;
     }
+    const activeRunIds = activeRunIdsKey.split("|");
 
     let ignore = false;
     const refresh = () => {
@@ -127,7 +129,7 @@ export function SearchPage({
       ignore = true;
       window.clearInterval(interval);
     };
-  }, [runs]);
+  }, [activeRunIdsKey]);
 
   function applyRunDetail(detail: SearchRunDetail) {
     setRunDetails((current) => ({ ...current, [detail.id]: detail }));
