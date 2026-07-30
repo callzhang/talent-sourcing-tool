@@ -1,74 +1,11 @@
 from __future__ import annotations
 
-from collections import Counter
 from typing import Any
 
 
 LOW_SCORE_THRESHOLD = 50
 DEFAULT_REASON_CODE = "insufficient_public_evidence"
-REASON_COPY = {
-    "weak_builder_evidence": (
-        "Weak builder evidence",
-        "the review does not show enough hands-on builder or shipping evidence",
-    ),
-    "insufficient_ai_native_signal": (
-        "Insufficient AI-native signal",
-        "the review does not show enough direct AI-native product or technical work",
-    ),
-    DEFAULT_REASON_CODE: (
-        "Insufficient public evidence",
-        "the review does not provide enough public evidence to justify moving forward",
-    ),
-    "platform_only_background": (
-        "Platform-only background",
-        "the review points more toward infrastructure or platform work than AI product prototyping",
-    ),
-    "solutions_architecture_mismatch": (
-        "Solutions architecture mismatch",
-        "the review points more toward solutions architecture than end-to-end product engineering",
-    ),
-    "consulting_heavy_profile": (
-        "Consulting-heavy profile",
-        "the review points more toward advisory or lightweight demo work than hands-on product building",
-    ),
-}
-ACTIONABLE_REFINEMENTS = {
-    "too_enterprise_sales_oriented": {
-        "suggestion_type": "query_rewrite",
-        "suggestion_text": (
-            "Tighten sourcing queries toward builders, founders, and AI product shippers "
-            "instead of enterprise sales or GTM profiles."
-        ),
-    },
-    "weak_builder_evidence": {
-        "suggestion_type": "rubric_adjustment",
-        "suggestion_text": (
-            "Clarify the builder-evidence rubric so reviewers consistently distinguish "
-            "hands-on shipping from advisory or leadership-only experience."
-        ),
-    },
-    "platform_only_background": {
-        "suggestion_type": "query_rewrite",
-        "suggestion_text": (
-            "Add negative sourcing terms for platform-only and infrastructure-heavy profiles "
-            "when searching for AI Product Engineer candidates."
-        ),
-    },
-    "solutions_architecture_mismatch": {
-        "suggestion_type": "query_rewrite",
-        "suggestion_text": (
-            "Separate solutions architect searches from AI Product Engineer searches unless "
-            "the candidate shows direct product-building ownership."
-        ),
-    },
-    "consulting_heavy_profile": {
-        "suggestion_type": "query_rewrite",
-        "suggestion_text": (
-            "Exclude consulting-heavy AI demo profiles unless there is clear evidence of "
-            "hands-on full-stack product implementation."
-        ),
-    },
-}
+MAX_REFINEMENT_REASON_LENGTH = 500
 
 
 def draft_pass_reason(review: Any) -> dict[str, Any]:
@@ -84,10 +21,8 @@ def draft_pass_reason(review: Any) -> dict[str, Any]:
     evidence = [*risks, *uncertainties]
     reason_code = _structured_reason_code(normalized_review)
 
-    title, summary = REASON_COPY.get(
-        reason_code,
-        ("Structured pass reason", f"the review supplied pass reason code {reason_code}"),
-    )
+    title = "Structured pass reason"
+    summary = f"the review identified {reason_code} as the primary gap"
 
     return {
         "reason_code": reason_code,
@@ -97,16 +32,27 @@ def draft_pass_reason(review: Any) -> dict[str, Any]:
 
 
 def suggest_refinements(pass_reasons: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    reason_counts = Counter(
-        reason.get("reason_code") for reason in pass_reasons if reason.get("reason_code")
-    )
-    suggestions: list[dict[str, Any]] = []
+    reason_text_by_code: dict[str, str] = {}
+    for reason in pass_reasons:
+        if not isinstance(reason, dict):
+            continue
+        reason_code = _safe_reason_code(reason.get("reason_code"))
+        if reason_code is None:
+            continue
+        reason_text = _safe_reason_code(reason.get("reason_text")) or "No additional HR explanation recorded."
+        reason_text_by_code.setdefault(reason_code, reason_text)
 
-    for reason_code, suggestion in ACTIONABLE_REFINEMENTS.items():
-        if reason_counts[reason_code]:
-            suggestions.append({**suggestion, "reason_codes": [reason_code]})
-
-    return suggestions
+    return [
+        {
+            "suggestion_type": "feedback_review",
+            "suggestion_text": (
+                "Review the JD rubric and sourcing query against this recorded pass reason "
+                f"({reason_code}): {reason_text[:MAX_REFINEMENT_REASON_LENGTH]}"
+            ),
+            "reason_codes": [reason_code],
+        }
+        for reason_code, reason_text in sorted(reason_text_by_code.items())
+    ]
 
 
 def _review_dict(review: Any) -> dict[str, Any]:

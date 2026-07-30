@@ -932,7 +932,7 @@ def test_pass_decision_persists_pass_reason_and_refinement_suggestions(
     assert pass_reason.user_edited is True
     assert suggestion.job_id == job_id
     assert suggestion.pass_reason_id == pass_reason.id
-    assert suggestion.suggestion_type == "rubric_adjustment"
+    assert suggestion.suggestion_type == "feedback_review"
     assert suggestion.status == "pending"
     assert suggestion.suggestion_metadata == {"reason_codes": ["weak_builder_evidence"]}
 
@@ -958,7 +958,7 @@ def test_refinement_suggestions_endpoint_lists_persisted_suggestions(
     data = response.json()
     assert len(data) == 1
     assert data[0]["job_id"] == job_id
-    assert data[0]["suggestion_type"] == "rubric_adjustment"
+    assert data[0]["suggestion_type"] == "feedback_review"
 
 
 def test_refinement_suggestions_endpoint_404s_for_missing_job(client: TestClient):
@@ -968,7 +968,7 @@ def test_refinement_suggestions_endpoint_404s_for_missing_job(client: TestClient
     assert response.json()["detail"] == "Job not found"
 
 
-def test_pass_decision_does_not_create_refinement_for_unknown_reason_code(
+def test_pass_decision_creates_refinement_for_any_reason_code(
     client: TestClient, engine: Engine
 ):
     job_id, candidate_id = seed_review_inputs(engine)
@@ -988,7 +988,10 @@ def test_pass_decision_does_not_create_refinement_for_unknown_reason_code(
 
     with Session(engine) as session:
         assert session.exec(select(PassReason)).one().reason_code == "manual_pass"
-        assert session.exec(select(RefinementSuggestion)).all() == []
+        suggestion = session.exec(select(RefinementSuggestion)).one()
+
+    assert suggestion.suggestion_type == "feedback_review"
+    assert suggestion.suggestion_metadata == {"reason_codes": ["manual_pass"]}
 
 
 def test_pass_decision_dedupes_pending_refinement_suggestions(
@@ -1032,7 +1035,7 @@ def test_pass_decision_dedupes_pending_refinement_suggestions(
     assert len(pass_reasons) == 2
     assert len(suggestions) == 1
     assert suggestions[0].status == "pending"
-    assert suggestions[0].suggestion_type == "rubric_adjustment"
+    assert suggestions[0].suggestion_type == "feedback_review"
     assert suggestions[0].suggestion_metadata == {"reason_codes": ["weak_builder_evidence"]}
 
 

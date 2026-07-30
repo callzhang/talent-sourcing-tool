@@ -12,7 +12,7 @@ def test_draft_pass_reason_uses_review_level_structured_reason_code():
     draft = draft_pass_reason(review)
 
     assert draft["reason_code"] == "weak_builder_evidence"
-    assert "builder" in draft["reason_text"].lower()
+    assert "weak_builder_evidence" in draft["reason_text"]
     assert draft["evidence"] == ["No public evidence of shipping AI products"]
 
 
@@ -31,7 +31,7 @@ def test_draft_pass_reason_uses_dimension_structured_gap_code():
     draft = draft_pass_reason(review)
 
     assert draft["reason_code"] == "insufficient_ai_native_signal"
-    assert "ai" in draft["reason_text"].lower()
+    assert "insufficient_ai_native_signal" in draft["reason_text"]
 
 
 def test_draft_pass_reason_does_not_route_from_dimension_names_or_risk_keywords():
@@ -135,63 +135,53 @@ def test_draft_pass_reason_ignores_non_scalar_evidence_and_non_dict_dimensions()
     assert draft["evidence"] == []
 
 
-def test_suggest_refinements_mentions_search_query():
-    suggestions = suggest_refinements(
-        pass_reasons=[
-            {"reason_code": "too_enterprise_sales_oriented", "reason_text": "Too sales-heavy"}
-        ]
-    )
-
-    assert any(item["suggestion_type"] == "query_rewrite" for item in suggestions)
-
-
-def test_suggest_refinements_maps_weak_builder_to_rubric_adjustment():
+def test_suggest_refinements_creates_traceable_suggestion_for_any_recorded_reason():
     suggestions = suggest_refinements(
         pass_reasons=[
             {
-                "reason_code": "weak_builder_evidence",
-                "reason_text": "No builder evidence",
-            }
-        ]
-    )
-
-    assert any(item["suggestion_type"] == "rubric_adjustment" for item in suggestions)
-
-
-@pytest.mark.parametrize(
-    "reason_code",
-    [
-        "platform_only_background",
-        "solutions_architecture_mismatch",
-        "consulting_heavy_profile",
-    ],
-)
-def test_suggest_refinements_maps_role_mismatch_reasons_to_query_rewrites(reason_code):
-    suggestions = suggest_refinements(
-        pass_reasons=[
-            {
-                "reason_code": reason_code,
-                "reason_text": "Mismatch",
+                "reason_code": "insufficient_role_evidence",
+                "reason_text": "No founding product marketing evidence was established.",
             }
         ]
     )
 
     assert suggestions == [
         {
-            "suggestion_type": "query_rewrite",
-            "suggestion_text": suggestions[0]["suggestion_text"],
-            "reason_codes": [reason_code],
+            "suggestion_type": "feedback_review",
+            "suggestion_text": (
+                "Review the JD rubric and sourcing query against this recorded pass reason "
+                "(insufficient_role_evidence): No founding product marketing evidence was established."
+            ),
+            "reason_codes": ["insufficient_role_evidence"],
         }
     ]
 
 
-def test_suggest_refinements_returns_no_fallback_for_non_actionable_reasons():
+def test_suggest_refinements_dedupes_reason_codes_and_preserves_first_explanation():
     suggestions = suggest_refinements(
         pass_reasons=[
             {
-                "reason_code": "insufficient_ai_native_signal",
-                "reason_text": "Weak AI signal",
-            }
+                "reason_code": "weak_builder_evidence",
+                "reason_text": "First explanation.",
+            },
+            {
+                "reason_code": "weak_builder_evidence",
+                "reason_text": "Second explanation.",
+            },
+        ]
+    )
+
+    assert len(suggestions) == 1
+    assert suggestions[0]["reason_codes"] == ["weak_builder_evidence"]
+    assert "First explanation." in suggestions[0]["suggestion_text"]
+
+
+def test_suggest_refinements_ignores_malformed_reasons():
+    suggestions = suggest_refinements(
+        pass_reasons=[
+            {"reason_code": None, "reason_text": "Missing code"},
+            {"reason_code": " ", "reason_text": "Empty code"},
+            "not a reason",
         ]
     )
 
