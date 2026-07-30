@@ -317,6 +317,7 @@ function RunProgress({ progress = {} }: { progress?: Record<string, unknown> }) 
   const completed = typeof progress.completed_channels === "number" ? progress.completed_channels : 0;
   const total = typeof progress.total_channels === "number" ? progress.total_channels : 0;
   const active = typeof progress.active_channel === "string" ? progress.active_channel : null;
+  const errorMessage = typeof progress.error_message === "string" ? progress.error_message : null;
   const channelErrors = channelErrorsForProgress(progress);
 
   return (
@@ -330,6 +331,7 @@ function RunProgress({ progress = {} }: { progress?: Record<string, unknown> }) 
           {channelLabel(channel)} 失败：{error}
         </span>
       ))}
+      {errorMessage ? <span className="run-channel-error">任务失败：{errorMessage}</span> : null}
     </div>
   );
 }
