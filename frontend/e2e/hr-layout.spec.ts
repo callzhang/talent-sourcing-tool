@@ -13,10 +13,69 @@ const job = {
   updated_at: "2026-07-31T00:00:00Z"
 };
 
-test("Search channel controls stay aligned at desktop and mobile widths", async ({ page }) => {
+const jobWithRubric = {
+  job,
+  rubric: {
+    id: "rubric_1",
+    job_id: job.id,
+    version: 1,
+    source_hash: "layout-test",
+    rubric: { dimensions: [] },
+    created_at: job.created_at,
+    updated_at: job.updated_at
+  }
+};
+
+const systemStatus = {
+  environment: "local",
+  deployment_ready: true,
+  warnings: [],
+  capabilities: {
+    persistent_storage_configured: true,
+    review_provider: "codex",
+    review_configured: true,
+    linkedin_configured: true,
+    exa_configured: true,
+    brightdata_configured: true,
+    public_channels: ["github", "openreview", "arxiv"],
+    required_channels: ["linkedin", "github", "openreview", "arxiv", "exa"],
+    optional_channels: ["brightdata_discover"],
+    channel_availability: {
+      linkedin: true,
+      github: true,
+      openreview: true,
+      arxiv: true,
+      exa: true,
+      brightdata_discover: true
+    },
+    missing_env_vars: {
+      storage: [],
+      review: [],
+      channels: {}
+    }
+  }
+};
+
+const providerChecks = {
+  providers: {
+    exa: { status: "ok", detail: "Available" },
+    brightdata: { status: "ok", detail: "Available" }
+  }
+};
+
+test("HR layout: Search channel controls stay aligned at desktop and mobile widths", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const pathname = new URL(route.request().url()).pathname;
-    const body = pathname === "/api/jobs" ? [job] : [];
+    const body =
+      pathname === "/api/jobs"
+        ? [job]
+        : pathname === `/api/jobs/${job.id}`
+          ? jobWithRubric
+        : pathname === "/api/system/status"
+          ? systemStatus
+          : pathname === "/api/system/provider-checks"
+            ? providerChecks
+            : [];
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(body)
@@ -50,4 +109,4 @@ test("Search channel controls stay aligned at desktop and mobile widths", async 
     )
   }));
   expect(mobile).toEqual({ columnCount: 1, hasOverflow: false });
-});
+}, 30_000);

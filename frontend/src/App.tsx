@@ -305,7 +305,7 @@ function DeploymentReadinessPanel({
 
   return (
     <details className="operations-disclosure">
-      <summary aria-label="Open operational status">
+      <summary aria-label="Operational status">
         <span>Operational status</span>
         <span
           className={`status-pill ${

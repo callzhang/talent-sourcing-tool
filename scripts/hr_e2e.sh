@@ -118,4 +118,4 @@ wait_for_url "$PLAYWRIGHT_BASE_URL"
 echo "== Install Playwright browser =="
 npm --prefix "$ROOT_DIR/frontend" run test:e2e:install >/dev/null
 echo
-PLAYWRIGHT_BASE_URL="$PLAYWRIGHT_BASE_URL" npm --prefix "$ROOT_DIR/frontend" run test:e2e -- --grep "HR flow"
+PLAYWRIGHT_BASE_URL="$PLAYWRIGHT_BASE_URL" npm --prefix "$ROOT_DIR/frontend" run test:e2e -- --grep "HR flow|HR layout"
