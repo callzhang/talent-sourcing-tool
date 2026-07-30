@@ -1,5 +1,64 @@
 export type ISODateString = string;
 
+export type SystemStatus = {
+  environment: "local" | "vercel" | string;
+  deployment_ready: boolean;
+  warnings: string[];
+  delivery_resources?: {
+    production_url: string;
+    local_url: string;
+    owner_checklist_path: string;
+    runbook_path: string;
+    verification_commands: string[];
+    owner_prompts: string[];
+  };
+  hard_blockers?: Array<{
+    code: string;
+    message: string;
+    env_vars?: string[];
+    channels?: string[];
+  }>;
+  optional_degradations?: Array<{
+    code: string;
+    message: string;
+    env_vars?: string[];
+    channels?: string[];
+  }>;
+  capabilities: {
+    persistent_storage_configured: boolean;
+    review_provider: string;
+    review_configured: boolean;
+    linkedin_configured?: boolean;
+    exa_configured: boolean;
+    brightdata_configured: boolean;
+    public_channels: string[];
+    required_channels?: SearchChannel[];
+    optional_channels?: SearchChannel[];
+    required_provider_checks?: string[];
+    optional_provider_checks?: string[];
+    channel_availability?: Partial<Record<SearchChannel, boolean>>;
+    missing_env_vars?: {
+      storage: string[];
+      review: string[];
+      channels: Partial<Record<SearchChannel, string[]>>;
+    };
+  };
+};
+
+export type ProviderChecks = {
+  providers: {
+    exa: {
+      status: string;
+      detail: string;
+    };
+    brightdata: {
+      status: string;
+      detail: string;
+      active_zones?: string[];
+    };
+  };
+};
+
 export type Job = {
   id: string;
   title: string;
@@ -108,8 +167,22 @@ export type ReviewPayload = Record<string, unknown> & {
 
 export type ReviewStartResult = {
   review_job_id: string;
-  review_id: string;
-  review: ReviewPayload;
+  status: string;
+  review_id: string | null;
+  review: ReviewPayload | null;
+};
+
+export type ReviewJob = {
+  id: string;
+  job_id: string;
+  candidate_id: string;
+  status: string;
+  error_message: string | null;
+  created_at: ISODateString;
+  started_at: ISODateString | null;
+  completed_at: ISODateString | null;
+  review_id: string | null;
+  review: ReviewPayload | null;
 };
 
 export type ReviewRead = {

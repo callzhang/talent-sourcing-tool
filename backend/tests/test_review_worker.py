@@ -2,9 +2,11 @@ import json
 import os
 from pathlib import Path
 
+import httpx
 import pytest
 
-from app.services.review_worker import ReviewWorker
+from app.core.config import Settings
+from app.services.review_worker import OpenAIReviewWorker, ReviewWorker, build_review_runner
 
 
 def test_review_worker_writes_input_and_reads_review_json(tmp_path: Path):
@@ -180,3 +182,69 @@ Path("review.json").write_text("{}")
 
     with pytest.raises(RuntimeError, match="missing required fields"):
         worker.run_review("review_job_123", {"candidate_id": "candidate_123", "job_id": "job_123"})
+
+
+def test_openai_review_worker_reads_json_response():
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "candidate_id": "candidate_123",
+                                        "job_id": "job_123",
+                                        "overall_score": 72,
+                                        "recommendation": "proceed",
+                                        "decision_summary": "Good enough.",
+                                        "evidence": ["Public launch"],
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+        )
+    )
+    worker = OpenAIReviewWorker(
+        api_key="test-key",
+        model="gpt-4.1-mini",
+        base_url="https://api.openai.com/v1",
+        timeout_seconds=30,
+        client=client,
+    )
+
+    result = worker.run_review("review_job_123", {"candidate_id": "candidate_123", "job_id": "job_123"})
+
+    assert result.workspace is None
+    assert result.input_path is None
+    assert result.output_path is None
+    assert result.review["overall_score"] == 72
+    assert result.review["recommendation"] == "proceed"
+
+
+def test_build_review_runner_uses_openai_on_vercel(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("VERCEL", "1")
+
+    runner = build_review_runner(
+        Settings(
+            TALENT_REVIEW_PROVIDER="auto",
+            TALENT_OPENAI_API_KEY="test-key",
+            TALENT_REVIEW_MODEL="gpt-4.1-mini",
+        ),
+        client=httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(500))),
+    )
+
+    assert isinstance(runner, OpenAIReviewWorker)
+
+
+def test_build_review_runner_uses_codex_locally(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+
+    runner = build_review_runner(Settings(TALENT_REVIEW_PROVIDER="auto"))
+
+    assert isinstance(runner, ReviewWorker)

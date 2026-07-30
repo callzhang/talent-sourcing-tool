@@ -52,6 +52,7 @@ class LiveSourcingConnector:
             timeout=20.0,
             follow_redirects=True,
             headers={"User-Agent": "talent-sourcing-tool/0.1"},
+            trust_env=False,
         )
 
     def search_people(
@@ -543,7 +544,10 @@ def canonical_profile_url(profile_url: str) -> str:
     scheme = (parsed.scheme or "https").lower()
     netloc = parsed.netloc.lower()
     path = parsed.path.rstrip("/")
-    return urlunsplit((scheme, netloc, path, "", ""))
+    query = parsed.query
+    if netloc.endswith("linkedin.com") and path.startswith("/in/"):
+        query = ""
+    return urlunsplit((scheme, netloc, path, query, ""))
 
 
 def normalize_source_label(profile_source: str) -> str:

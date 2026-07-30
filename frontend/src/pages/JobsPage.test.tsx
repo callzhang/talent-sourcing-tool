@@ -257,6 +257,43 @@ it("keeps the detail pane empty until New Job is chosen when no job is selected"
   expect(screen.getByRole("button", { name: "Save Job" })).toBeInTheDocument();
 });
 
+it("disables job creation in production when durable storage is unavailable", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/jobs")) {
+      return jsonResponse([job]);
+    }
+    if (url.endsWith("/api/jobs/job_1")) {
+      return jsonResponse(jobWithRubric);
+    }
+    return jsonResponse(null);
+  });
+
+  render(
+    <JobsPage
+      selectedJobId="job_1"
+      systemStatus={{
+        environment: "vercel",
+        deployment_ready: false,
+        warnings: [],
+        capabilities: {
+          persistent_storage_configured: false,
+          review_provider: "openai",
+          review_configured: false,
+          exa_configured: false,
+          brightdata_configured: false,
+          public_channels: ["github", "openreview", "arxiv"]
+        }
+      }}
+      onSelectJob={() => undefined}
+      onCreatedJob={() => undefined}
+    />
+  );
+
+  expect(await screen.findByText("Job creation is blocked in production until durable database storage is configured.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "New Job" })).toBeDisabled();
+});
+
 const job = {
   id: "job_1",
   title: "AI Product Engineer",

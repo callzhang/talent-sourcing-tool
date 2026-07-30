@@ -7,6 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, col, select
 
 from app.core.config import settings
+from app.core.deployment_guard import (
+    require_persistent_storage_for_writes,
+    require_review_execution_for_production,
+)
 from app.db.models import (
     Candidate,
     CandidateDecision,
@@ -18,11 +22,11 @@ from app.db.models import (
     Rubric,
 )
 from app.db.session import get_session
-from app.schemas import DecisionCreate, ReviewRead, ReviewStart
+from app.schemas import DecisionCreate, ReviewJobRead, ReviewRead, ReviewStart, ReviewStartResult
 from app.services.pass_reason import draft_pass_reason, suggest_refinements
-from app.services.review_worker import ReviewWorker
+from app.services.review_worker import ReviewRunner, build_review_runner
 
-router = APIRouter(prefix="/api/reviews", tags=["reviews"])
+router = APIRouter(prefix="/reviews", tags=["reviews"])
 
 
 def latest_rubric_for_job(session: Session, job_id: str) -> Rubric | None:
@@ -155,18 +159,140 @@ def read_review(session: Session, review: Review) -> ReviewRead:
     review_job = session.get(ReviewJob, review.review_job_id)
     if review_job is None:
         raise HTTPException(status_code=404, detail="Review job not found")
+    normalized_review = normalize_review_data(review.raw_review)
     return ReviewRead(
         id=review.id,
         review_job_id=review.review_job_id,
         job_id=review_job.job_id,
         candidate_id=review_job.candidate_id,
         summary=review.summary,
-        evidence=review.evidence,
+        evidence=normalize_review_evidence(review.evidence),
         recommendation=review.recommendation,
         score=review.score,
-        review=review.raw_review,
+        review=normalized_review,
         created_at=review.created_at,
     )
+
+
+def read_review_job(session: Session, review_job: ReviewJob) -> ReviewJobRead:
+    review = session.exec(
+        select(Review)
+        .where(Review.review_job_id == review_job.id)
+        .order_by(Review.created_at.desc())
+    ).first()
+    review_id = review.id if review else None
+    normalized_review = normalize_review_data(review.raw_review) if review else None
+    return ReviewJobRead(
+        id=review_job.id,
+        job_id=review_job.job_id,
+        candidate_id=review_job.candidate_id,
+        status=review_job.status,
+        error_message=review_job.error_message,
+        created_at=review_job.created_at,
+        started_at=review_job.started_at,
+        completed_at=review_job.completed_at,
+        review_id=review_id,
+        review=normalized_review,
+    )
+
+
+def _claim_pending_review_job(session: Session, review_job_id: str) -> ReviewJob | None:
+    review_job = session.get(ReviewJob, review_job_id)
+    if review_job is None or review_job.status != "pending":
+        return review_job
+    review_job.status = "running"
+    review_job.started_at = datetime.now(UTC)
+    session.add(review_job)
+    session.commit()
+    session.refresh(review_job)
+    return review_job
+
+
+def process_review_job(
+    session: Session,
+    review_job_id: str,
+    *,
+    worker: ReviewRunner | None = None,
+) -> ReviewJob:
+    review_job = _claim_pending_review_job(session, review_job_id)
+    if review_job is None:
+        raise HTTPException(status_code=404, detail="Review job not found")
+    if review_job.status != "running":
+        return review_job
+
+    job = session.get(Job, review_job.job_id)
+    if job is None:
+        mark_review_job_failed(session, review_job.id, "Job not found")
+        return session.get(ReviewJob, review_job.id)  # type: ignore[return-value]
+    candidate = session.get(Candidate, review_job.candidate_id)
+    if candidate is None:
+        mark_review_job_failed(session, review_job.id, "Candidate not found")
+        return session.get(ReviewJob, review_job.id)  # type: ignore[return-value]
+    rubric = latest_rubric_for_job(session, job.id)
+    if rubric is None:
+        mark_review_job_failed(session, review_job.id, "Job has no rubric")
+        return session.get(ReviewJob, review_job.id)  # type: ignore[return-value]
+
+    try:
+        runner = worker or build_review_runner(settings)
+        worker_result = runner.run_review(
+            review_job.id,
+            review_payload(job=job, candidate=candidate, rubric=rubric),
+        )
+    except Exception as exc:
+        mark_review_job_failed(session, review_job.id, str(exc))
+        return session.get(ReviewJob, review_job.id)  # type: ignore[return-value]
+
+    try:
+        review_data = normalize_review_data(worker_result.review)
+        validate_review_identity(
+            review_data=review_data,
+            review_job=review_job,
+            job=job,
+            candidate=candidate,
+        )
+        review = Review(
+            review_job_id=review_job.id,
+            summary=str(review_data["decision_summary"]),
+            evidence=review_data.get("evidence", []),
+            recommendation=str(review_data["recommendation"]),
+            score=float(review_data["overall_score"]),
+            raw_review=review_data,
+        )
+        review_job.status = "completed"
+        review_job.workspace_path = str(worker_result.workspace) if worker_result.workspace else None
+        review_job.input_path = str(worker_result.input_path) if worker_result.input_path else None
+        review_job.output_path = str(worker_result.output_path) if worker_result.output_path else None
+        review_job.completed_at = datetime.now(UTC)
+        session.add(review_job)
+        session.add(review)
+        session.commit()
+    except Exception as exc:
+        mark_review_job_failed(session, review_job.id, str(exc))
+
+    refreshed_review_job = session.get(ReviewJob, review_job.id)
+    if refreshed_review_job is None:
+        raise HTTPException(status_code=404, detail="Review job not found")
+    return refreshed_review_job
+
+
+def normalize_review_evidence(evidence: Any) -> list[dict[str, Any]]:
+    if not isinstance(evidence, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(evidence, start=1):
+        if isinstance(item, dict):
+            normalized.append(item)
+            continue
+        normalized.append({"label": f"Evidence {index}", "detail": str(item)})
+    return normalized
+
+
+def normalize_review_data(review_data: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(review_data)
+    normalized["evidence"] = normalize_review_evidence(review_data.get("evidence", []))
+    return normalized
 
 
 def validate_review_identity(
@@ -215,10 +341,47 @@ def get_latest_review(
     return read_review(session, review)
 
 
-@router.post("/start")
+@router.get("/latest-job", response_model=ReviewJobRead | None)
+def get_latest_review_job(
+    job_id: str,
+    candidate_id: str,
+    session: Session = Depends(get_session),
+) -> ReviewJobRead | None:
+    if session.get(Job, job_id) is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if session.get(Candidate, candidate_id) is None:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    review_job = session.exec(
+        select(ReviewJob)
+        .where(ReviewJob.job_id == job_id, ReviewJob.candidate_id == candidate_id)
+        .order_by(ReviewJob.created_at.desc())
+    ).first()
+    if review_job is None:
+        return None
+    return read_review_job(session, review_job)
+
+
+@router.get("/jobs/{review_job_id}", response_model=ReviewJobRead)
+def get_review_job(review_job_id: str, session: Session = Depends(get_session)) -> ReviewJobRead:
+    review_job = session.get(ReviewJob, review_job_id)
+    if review_job is None:
+        raise HTTPException(status_code=404, detail="Review job not found")
+    return read_review_job(session, review_job)
+
+
+@router.post("/jobs/{review_job_id}/run", response_model=ReviewJobRead)
+def run_review_job(review_job_id: str, session: Session = Depends(get_session)) -> ReviewJobRead:
+    review_job = process_review_job(session, review_job_id)
+    return read_review_job(session, review_job)
+
+
+@router.post("/start", response_model=ReviewStartResult)
 def start_review(
     review_start: ReviewStart, session: Session = Depends(get_session)
-) -> dict[str, Any]:
+) -> ReviewStartResult:
+    require_persistent_storage_for_writes()
+    require_review_execution_for_production()
     job = session.get(Job, review_start.job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -229,60 +392,17 @@ def start_review(
     if rubric is None:
         raise HTTPException(status_code=400, detail="Job has no rubric")
 
-    review_job = ReviewJob(job_id=job.id, candidate_id=candidate.id, status="running")
-    review_job.started_at = datetime.now(UTC)
+    review_job = ReviewJob(job_id=job.id, candidate_id=candidate.id, status="pending")
     session.add(review_job)
     session.commit()
     session.refresh(review_job)
 
-    worker = ReviewWorker(
-        codex_command=[settings.codex_binary, "exec"],
-        workspace_root=settings.review_workspace_root,
+    return ReviewStartResult(
+        review_job_id=review_job.id,
+        status=review_job.status,
+        review_id=None,
+        review=None,
     )
-    try:
-        worker_result = worker.run_review(
-            review_job.id,
-            review_payload(job=job, candidate=candidate, rubric=rubric),
-        )
-    except Exception as exc:
-        mark_review_job_failed(session, review_job.id, str(exc))
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    try:
-        review_data = worker_result.review
-        validate_review_identity(
-            review_data=review_data,
-            review_job=review_job,
-            job=job,
-            candidate=candidate,
-        )
-        review = Review(
-            review_job_id=review_job.id,
-            summary=str(review_data["decision_summary"]),
-            evidence=review_data.get("evidence", []),
-            recommendation=str(review_data["recommendation"]),
-            score=float(review_data["overall_score"]),
-            raw_review=review_data,
-        )
-        review_job.status = "completed"
-        review_job.workspace_path = str(worker_result.workspace)
-        review_job.input_path = str(worker_result.input_path)
-        review_job.output_path = str(worker_result.output_path)
-        review_job.completed_at = datetime.now(UTC)
-        session.add(review_job)
-        session.add(review)
-        session.commit()
-        session.refresh(review_job)
-        session.refresh(review)
-    except Exception as exc:
-        mark_review_job_failed(session, review_job.id, str(exc))
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    return {
-        "review_job_id": review_job.id,
-        "review_id": review.id,
-        "review": review_data,
-    }
 
 
 @router.get("/{review_id}/draft-pass-reason")
@@ -326,6 +446,7 @@ def list_refinement_suggestions(
 def create_decision(
     decision_create: DecisionCreate, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
+    require_persistent_storage_for_writes()
     job = session.get(Job, decision_create.job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")

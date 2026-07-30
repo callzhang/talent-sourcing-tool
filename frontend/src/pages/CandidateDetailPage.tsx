@@ -1,11 +1,19 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { api } from "../api";
-import type { Candidate, DraftPassReason, ReviewPayload, ReviewRead } from "../types";
+import type {
+  Candidate,
+  DraftPassReason,
+  ReviewJob,
+  ReviewPayload,
+  ReviewRead,
+  SystemStatus
+} from "../types";
 
 type CandidateDetailPageProps = {
   selectedJobId: string | null;
   candidate: Candidate | null;
+  systemStatus?: SystemStatus | null;
   onBack: () => void;
 };
 
@@ -15,13 +23,18 @@ type ReviewContext = {
   candidateId: string;
 };
 
+type ReviewStageKey = "idle" | "pending" | "running" | "completed" | "failed";
+
 export function CandidateDetailPage({
   selectedJobId,
   candidate,
+  systemStatus = null,
   onBack
 }: CandidateDetailPageProps) {
   const [loadedCandidate, setLoadedCandidate] = useState<Candidate | null>(candidate);
   const [reviewContext, setReviewContext] = useState<ReviewContext | null>(null);
+  const [reviewJobId, setReviewJobId] = useState<string | null>(null);
+  const [reviewJobStatus, setReviewJobStatus] = useState<ReviewStageKey>("idle");
   const [review, setReview] = useState<ReviewPayload | null>(null);
   const [draft, setDraft] = useState<DraftPassReason | null>(null);
   const [notes, setNotes] = useState("");
@@ -41,10 +54,22 @@ export function CandidateDetailPage({
     reviewContext
   };
   const reviewId = reviewContext?.reviewId ?? null;
+  const reviewConfigured = systemStatus?.capabilities.review_configured ?? true;
+  const reviewStage = currentReviewStage({
+    reviewConfigured,
+    reviewJobId,
+    reviewJobStatus,
+    review,
+    reviewContext
+  });
+  const decisionLocked = reviewStage.key === "running" || reviewStage.key === "pending";
+  const reviewReadyForDecision = reviewStage.key === "completed";
 
   useEffect(() => {
     setLoadedCandidate(null);
     setReviewContext(null);
+    setReviewJobId(null);
+    setReviewJobStatus("idle");
     setReview(null);
     setDraft(null);
     setNotes("");
@@ -68,8 +93,10 @@ export function CandidateDetailPage({
       .catch(() => undefined);
     api
       .getLatestReview(selectedJobId, candidate.id)
-      .then((latestReview: ReviewRead | null) => {
+      .then(async (latestReview: ReviewRead | null) => {
         if (!ignore && latestReview) {
+          setReviewJobId(latestReview.review_job_id);
+          setReviewJobStatus("completed");
           setReviewContext({
             reviewId: latestReview.id,
             jobId: latestReview.job_id,
@@ -77,15 +104,60 @@ export function CandidateDetailPage({
           });
           setReview(latestReview.review);
           setStatus("Loaded latest review.");
+          return;
+        }
+        const latestReviewJob = await api.getLatestReviewJob(selectedJobId, candidate.id);
+        if (!ignore && isReviewJob(latestReviewJob)) {
+          hydrateRecoveredReviewJob(latestReviewJob);
         } else if (!ignore) {
-          setStatus("Ready for AI review.");
+          setStatus(
+            reviewConfigured
+              ? "Ready for AI review."
+              : "AI review is unavailable in this deployment until production review config is completed."
+          );
         }
       })
       .catch(() => undefined);
     return () => {
       ignore = true;
     };
-  }, [candidate, selectedJobId]);
+  }, [candidate, reviewConfigured, selectedJobId]);
+
+  useEffect(() => {
+    if (!reviewJobId || reviewContext?.reviewId) {
+      return;
+    }
+    const activeReviewJobId = reviewJobId;
+
+    let ignore = false;
+    let timeoutId: number | undefined;
+
+    async function pollReviewJob() {
+      try {
+        const reviewJob = await api.runReviewJob(activeReviewJobId);
+        if (ignore) {
+          return;
+        }
+        applyReviewJob(reviewJob);
+        if (reviewJob.status === "running" || reviewJob.status === "pending") {
+          timeoutId = window.setTimeout(pollReviewJob, 2000);
+        }
+      } catch (error) {
+        if (!ignore && isCurrentCandidateContext(selectedJobId ?? "", candidate?.id ?? "")) {
+          setStatus(error instanceof Error ? error.message : "Unable to refresh review job.");
+        }
+      }
+    }
+
+    void pollReviewJob();
+
+    return () => {
+      ignore = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [candidate?.id, reviewContext?.reviewId, reviewJobId, selectedJobId]);
 
   const isCandidateContextReady =
     selectedJobId !== null &&
@@ -144,6 +216,7 @@ export function CandidateDetailPage({
     const requestedJobId = selectedJobId;
     const requestedCandidateId = loadedCandidate.id;
     setIsWorking(true);
+    setReviewJobStatus("running");
     setStatus("Running AI review...");
     try {
       const result = await api.startReview({
@@ -153,16 +226,26 @@ export function CandidateDetailPage({
       if (!isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
         return;
       }
-      setReviewContext({
-        reviewId: result.review_id,
-        jobId: requestedJobId,
-        candidateId: requestedCandidateId
-      });
-      setReview(result.review);
+      setReviewJobId(result.review_job_id);
       setDraft(null);
-      setStatus("AI review completed.");
+      if (result.review_id && result.review) {
+        setReviewJobStatus("completed");
+        setReviewContext({
+          reviewId: result.review_id,
+          jobId: requestedJobId,
+          candidateId: requestedCandidateId
+        });
+        setReview(result.review);
+        setStatus("AI review completed.");
+      } else {
+        setReviewJobStatus(normalizeReviewStage(result.status));
+        setReviewContext(null);
+        setReview(null);
+        setStatus(reviewStatusMessage(result.status));
+      }
     } catch (error) {
       if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        setReviewJobStatus(reviewContext && review ? "completed" : "failed");
         setStatus(error instanceof Error ? error.message : "Unable to start review.");
       }
     } finally {
@@ -274,6 +357,31 @@ export function CandidateDetailPage({
     void submitDecision("proceed");
   }
 
+  function applyReviewJob(activeReviewJob: ReviewJob) {
+    if (!isCurrentCandidateContext(activeReviewJob.job_id, activeReviewJob.candidate_id)) {
+      return;
+    }
+    hydrateRecoveredReviewJob(activeReviewJob);
+  }
+
+  function hydrateRecoveredReviewJob(activeReviewJob: ReviewJob) {
+    setReviewJobId(activeReviewJob.id);
+    setReviewJobStatus(normalizeReviewStage(activeReviewJob.status));
+    if (activeReviewJob.review_id && activeReviewJob.review) {
+      setReviewContext({
+        reviewId: activeReviewJob.review_id,
+        jobId: activeReviewJob.job_id,
+        candidateId: activeReviewJob.candidate_id
+      });
+      setReview(activeReviewJob.review);
+    }
+    if (activeReviewJob.status === "failed") {
+      setStatus(activeReviewJob.error_message ?? "AI review failed.");
+      return;
+    }
+    setStatus(reviewStatusMessage(activeReviewJob.status));
+  }
+
   return (
     <section className="workspace-grid detail-grid" aria-labelledby="candidate-detail-heading">
       <div className="card">
@@ -289,11 +397,18 @@ export function CandidateDetailPage({
         <a href={loadedCandidate.profile_url} target="_blank" rel="noreferrer">
           Open {profileSourceLabel(loadedCandidate.profile_source)} profile
         </a>
+        <div className="review-status-panel" aria-label="Review status">
+          <div className="split-heading">
+            <span className={`status-pill status-pill-${reviewStage.tone}`}>{reviewStage.label}</span>
+            {reviewJobId ? <code>{reviewJobId.slice(0, 16)}</code> : null}
+          </div>
+          <p className="muted review-status-copy">{reviewStage.description}</p>
+        </div>
         <button
           type="button"
           className="primary-action"
           onClick={startReview}
-          disabled={isWorking}
+          disabled={isWorking || !reviewConfigured || decisionLocked}
         >
           Start AI review
         </button>
@@ -307,7 +422,7 @@ export function CandidateDetailPage({
           type="button"
           className="secondary-action"
           onClick={draftPassReason}
-          disabled={isWorking || reviewId === null}
+          disabled={isWorking || reviewId === null || !reviewReadyForDecision}
         >
           Draft pass reason
         </button>
@@ -329,15 +444,126 @@ export function CandidateDetailPage({
           />
         </label>
         <div className="action-row">
-          <button type="button" className="danger-action" onClick={() => void submitDecision("pass")}>
+          <button
+            type="button"
+            className="danger-action"
+            disabled={isWorking || !reviewReadyForDecision}
+            onClick={() => void submitDecision("pass")}
+          >
             Submit pass
           </button>
-          <button type="submit" className="primary-action">
+          <button type="submit" className="primary-action" disabled={isWorking || !reviewReadyForDecision}>
             Submit proceed
           </button>
         </div>
       </form>
     </section>
+  );
+}
+
+function reviewStatusMessage(status: string): string {
+  if (status === "completed") {
+    return "AI review completed.";
+  }
+  if (status === "failed") {
+    return "AI review failed.";
+  }
+  if (status === "running") {
+    return "AI review running...";
+  }
+  if (status === "pending") {
+    return "AI review queued...";
+  }
+  return `AI review status: ${status}`;
+}
+
+function currentReviewStage({
+  reviewConfigured,
+  reviewJobId,
+  reviewJobStatus,
+  review,
+  reviewContext,
+}: {
+  reviewConfigured: boolean;
+  reviewJobId: string | null;
+  reviewJobStatus: ReviewStageKey;
+  review: ReviewPayload | null;
+  reviewContext: ReviewContext | null;
+}): { key: "disabled" | "idle" | "pending" | "running" | "completed" | "failed"; label: string; description: string; tone: "neutral" | "warning" | "success" | "error" } {
+  if (!reviewConfigured) {
+    return {
+      key: "disabled",
+      label: "Unavailable",
+      description: "Production review configuration is incomplete.",
+      tone: "warning"
+    };
+  }
+  if (reviewJobStatus === "failed") {
+    return {
+      key: "failed",
+      label: "Failed",
+      description: "The latest review attempt failed. Check the error message below.",
+      tone: "error"
+    };
+  }
+  if (reviewJobStatus === "pending") {
+    return {
+      key: "pending",
+      label: "Queued",
+      description: "The review job has been created and is waiting to start.",
+      tone: "warning"
+    };
+  }
+  if (reviewJobStatus === "running") {
+    return {
+      key: "running",
+      label: "Running",
+      description: "The AI review is currently in progress. Decision actions stay locked until it finishes.",
+      tone: "warning"
+    };
+  }
+  if (reviewJobStatus === "completed" && reviewJobId && reviewContext && review) {
+    return {
+      key: "completed",
+      label: "Completed",
+      description: "A structured AI review is available and ready for human decision.",
+      tone: "success"
+    };
+  }
+  return {
+    key: "idle",
+    label: "Ready",
+    description: "No active AI review is running for this candidate yet.",
+    tone: "neutral"
+  };
+}
+
+function normalizeReviewStage(status: string): ReviewStageKey {
+  if (status === "completed") {
+    return "completed";
+  }
+  if (status === "failed") {
+    return "failed";
+  }
+  if (status === "running") {
+    return "running";
+  }
+  if (status === "pending") {
+    return "pending";
+  }
+  return "idle";
+}
+
+function isReviewJob(value: unknown): value is ReviewJob {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidateReviewJob = value as Partial<ReviewJob>;
+  return (
+    typeof candidateReviewJob.id === "string" &&
+    typeof candidateReviewJob.job_id === "string" &&
+    typeof candidateReviewJob.candidate_id === "string" &&
+    typeof candidateReviewJob.status === "string"
   );
 }
 

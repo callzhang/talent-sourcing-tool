@@ -233,6 +233,25 @@ def test_create_job_reuses_existing_job_with_same_title(client: TestClient, engi
     assert saved_jobs[0].description == "Build demos."
 
 
+def test_create_job_is_blocked_on_vercel_without_durable_storage(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    from app.core import deployment_guard
+
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(
+        deployment_guard.settings, "database_url", "sqlite:////tmp/talent_sourcing.sqlite3"
+    )
+
+    response = client.post(
+        "/api/jobs",
+        json={"title": "AI Product Engineer", "description": "Build demos"},
+    )
+
+    assert response.status_code == 503
+    assert "durable storage is configured" in response.json()["detail"]
+
+
 def test_list_jobs_collapses_legacy_duplicate_titles(client: TestClient, engine: Engine):
     with Session(engine) as session:
         older = Job(title="AI Product Engineer", description="Older duplicate")

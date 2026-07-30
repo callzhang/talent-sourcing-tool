@@ -125,6 +125,8 @@ def test_init_db_invokes_metadata_create_all(monkeypatch):
         calls.append(engine)
 
     monkeypatch.setattr("app.db.init_db.SQLModel.metadata.create_all", fake_create_all)
+    monkeypatch.setattr("app.db.init_db.migrate_existing_sqlite_schema", lambda _: None)
+    monkeypatch.setattr("app.db.init_db.seed_default_jobs", lambda _: None)
 
     init_db()
 

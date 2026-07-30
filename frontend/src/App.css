@@ -184,6 +184,113 @@ h3 {
   max-width: 760px;
 }
 
+.status-banner {
+  padding: 16px 18px;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-text);
+}
+
+.status-banner strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+.status-banner ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text-secondary);
+}
+
+.status-detail-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(245, 158, 11, 0.32);
+}
+
+.status-detail-group strong {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.status-detail-group ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.readiness-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.readiness-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.readiness-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(250, 250, 250, 0.9);
+}
+
+.readiness-item .muted {
+  margin-bottom: 0;
+}
+
+.handoff-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.handoff-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.handoff-actions {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.command-list,
+.owner-prompt-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.command-list code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.status-pill-neutral {
+  color: var(--color-text-secondary);
+  background: rgba(107, 107, 107, 0.12);
+}
+
+.readiness-diagnostic {
+  padding-top: 4px;
+  border-top: 1px dashed var(--color-border);
+  font-size: 0.8125rem;
+}
+
 .eyebrow,
 .section-kicker {
   margin: 0 0 10px;
@@ -357,6 +464,24 @@ h3 {
   background: #f8fafc;
 }
 
+.review-status-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.review-status-panel code {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.review-status-copy {
+  margin-bottom: 0;
+}
+
 .candidate-list-row span {
   color: var(--color-text-secondary);
   font-size: 0.875rem;
@@ -459,6 +584,33 @@ h3 {
   background: #f3f4f6;
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.status-pill {
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.status-pill-neutral {
+  color: var(--color-text-secondary);
+  background: #f3f4f6;
+}
+
+.status-pill-warning {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.status-pill-success {
+  color: #065f46;
+  background: #d1fae5;
+}
+
+.status-pill-error {
+  color: #991b1b;
+  background: #fee2e2;
 }
 
 .job-list,

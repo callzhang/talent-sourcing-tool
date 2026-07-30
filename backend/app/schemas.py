@@ -105,9 +105,29 @@ class ReviewRead(BaseModel):
     created_at: datetime
 
 
+class ReviewJobRead(BaseModel):
+    id: str
+    job_id: str
+    candidate_id: str
+    status: str
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    review_id: str | None = None
+    review: dict[str, Any] | None = None
+
+
 class ReviewStart(BaseModel):
     job_id: str
     candidate_id: str
+
+
+class ReviewStartResult(BaseModel):
+    review_job_id: str
+    status: str
+    review_id: str | None = None
+    review: dict[str, Any] | None = None
 
 
 class DecisionCreate(BaseModel):

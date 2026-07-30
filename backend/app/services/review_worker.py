@@ -7,9 +7,12 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
+import httpx
 from pydantic import BaseModel, Field, ValidationError
+
+from app.core.config import Settings, settings
 
 
 REQUIRED_REVIEW_FIELDS = {
@@ -35,6 +38,12 @@ Then write review.json in this current workspace as a single JSON object.
 Do not write directly to any database or modify files other than review.json."""
 
 
+OPENAI_REVIEW_PROMPT = """You are an expert recruiting analyst for a high-signal sourcing workflow.
+Produce exactly one JSON object that follows review.schema.json.
+Use only evidence available in input.json. Do not invent private history.
+If evidence is thin or ambiguous, score conservatively and explain the uncertainty."""
+
+
 class ReviewOutput(BaseModel):
     candidate_id: str
     job_id: str
@@ -53,10 +62,15 @@ class ReviewOutput(BaseModel):
 
 @dataclass(frozen=True)
 class ReviewWorkerResult:
-    workspace: Path
-    input_path: Path
-    output_path: Path
+    workspace: Path | None
+    input_path: Path | None
+    output_path: Path | None
     review: dict[str, Any]
+
+
+class ReviewRunner(Protocol):
+    def run_review(self, review_job_id: str, payload: dict[str, Any]) -> ReviewWorkerResult:
+        """Generate a structured candidate review."""
 
 
 class ReviewWorker:
@@ -78,32 +92,7 @@ class ReviewWorker:
         review_input = {"review_job_id": review_job_id, **payload}
         input_path.write_text(json.dumps(review_input, indent=2, sort_keys=True))
         (workspace / "review.schema.json").write_text(
-            json.dumps(
-                {
-                    "type": "object",
-                    "required": sorted(REQUIRED_REVIEW_FIELDS),
-                    "properties": {
-                        "candidate_id": {"type": "string"},
-                        "job_id": {"type": "string"},
-                        "overall_score": {"type": "number"},
-                        "recommendation": {
-                            "type": "string",
-                            "enum": ["strong_proceed", "proceed", "borderline", "pass"],
-                        },
-                        "decision_summary": {"type": "string"},
-                        "dimension_scores": {"type": "array"},
-                        "strengths": {"type": "array"},
-                        "risks": {"type": "array"},
-                        "evidence": {"type": "array"},
-                        "sources": {"type": "array"},
-                        "suggested_interview_questions": {"type": "array"},
-                        "uncertainties": {"type": "array"},
-                        "review_notes": {"type": "string"},
-                    },
-                },
-                indent=2,
-                sort_keys=True,
-            )
+            json.dumps(build_review_schema(), indent=2, sort_keys=True)
         )
 
         env = {**os.environ, "HOME": str(temp_home), "CODEX_HOME": str(temp_codex_home)}
@@ -126,15 +115,7 @@ class ReviewWorker:
         if not output_path.exists():
             raise RuntimeError(f"Review worker did not create {output_path}")
 
-        review = json.loads(output_path.read_text())
-        missing_fields = sorted(REQUIRED_REVIEW_FIELDS.difference(review))
-        if missing_fields:
-            raise RuntimeError(f"Review output missing required fields: {', '.join(missing_fields)}")
-        try:
-            validated_review = ReviewOutput.model_validate(review)
-        except ValidationError as exc:
-            raise RuntimeError(f"Invalid review output: {exc}") from exc
-
+        validated_review = validate_review_output(json.loads(output_path.read_text()))
         return ReviewWorkerResult(
             workspace=workspace,
             input_path=input_path,
@@ -170,3 +151,155 @@ class ReviewWorker:
         source_auth = source_home / "auth.json"
         if source_auth.exists():
             shutil.copy2(source_auth, temp_codex_home / "auth.json")
+
+
+class OpenAIReviewWorker:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        base_url: str,
+        timeout_seconds: int,
+        client: httpx.Client | None = None,
+    ) -> None:
+        if not api_key.strip():
+            raise RuntimeError(
+                "openai review provider requires TALENT_OPENAI_API_KEY or OPENAI_API_KEY"
+            )
+        self.api_key = api_key.strip()
+        self.model = model.strip()
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.client = client or httpx.Client(
+            timeout=float(timeout_seconds),
+            follow_redirects=True,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            trust_env=False,
+        )
+
+    def run_review(self, review_job_id: str, payload: dict[str, Any]) -> ReviewWorkerResult:
+        review_input = {"review_job_id": review_job_id, **payload}
+        schema_json = json.dumps(build_review_schema(), indent=2, sort_keys=True)
+        input_json = json.dumps(review_input, indent=2, sort_keys=True)
+        response = self.client.post(
+            f"{self.base_url}/chat/completions",
+            json={
+                "model": self.model,
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": OPENAI_REVIEW_PROMPT},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"review.schema.json:\n{schema_json}\n\n"
+                            f"input.json:\n{input_json}\n\n"
+                            "Return only the JSON object."
+                        ),
+                    },
+                ],
+            },
+        )
+        response.raise_for_status()
+        payload_json = response.json()
+        content = extract_openai_message_content(payload_json)
+        try:
+            review = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"OpenAI review response was not valid JSON: {content}") from exc
+
+        validated_review = validate_review_output(review)
+        return ReviewWorkerResult(
+            workspace=None,
+            input_path=None,
+            output_path=None,
+            review=validated_review.model_dump(),
+        )
+
+
+def build_review_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": sorted(REQUIRED_REVIEW_FIELDS),
+        "properties": {
+            "candidate_id": {"type": "string"},
+            "job_id": {"type": "string"},
+            "overall_score": {"type": "number"},
+            "recommendation": {
+                "type": "string",
+                "enum": ["strong_proceed", "proceed", "borderline", "pass"],
+            },
+            "decision_summary": {"type": "string"},
+            "dimension_scores": {"type": "array"},
+            "strengths": {"type": "array"},
+            "risks": {"type": "array"},
+            "evidence": {"type": "array"},
+            "sources": {"type": "array"},
+            "suggested_interview_questions": {"type": "array"},
+            "uncertainties": {"type": "array"},
+            "review_notes": {"type": "string"},
+        },
+    }
+
+
+def validate_review_output(review: dict[str, Any]) -> ReviewOutput:
+    missing_fields = sorted(REQUIRED_REVIEW_FIELDS.difference(review))
+    if missing_fields:
+        raise RuntimeError(f"Review output missing required fields: {', '.join(missing_fields)}")
+    try:
+        return ReviewOutput.model_validate(review)
+    except ValidationError as exc:
+        raise RuntimeError(f"Invalid review output: {exc}") from exc
+
+
+def extract_openai_message_content(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError(f"OpenAI review response did not include choices: {payload}")
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError(f"OpenAI review response did not include message: {payload}")
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text)
+        if parts:
+            return "".join(parts)
+    raise RuntimeError(f"OpenAI review response content was empty: {payload}")
+
+
+def resolve_review_provider(app_settings: Settings) -> str:
+    if app_settings.review_provider != "auto":
+        return app_settings.review_provider
+    return "openai" if os.environ.get("VERCEL") == "1" else "codex"
+
+
+def build_review_runner(
+    app_settings: Settings | None = None, *, client: httpx.Client | None = None
+) -> ReviewRunner:
+    resolved_settings = app_settings or settings
+    provider = resolve_review_provider(resolved_settings)
+    if provider == "codex":
+        return ReviewWorker(
+            codex_command=[resolved_settings.codex_binary, "exec"],
+            workspace_root=resolved_settings.review_workspace_root,
+        )
+    if provider == "openai":
+        return OpenAIReviewWorker(
+            api_key=resolved_settings.openai_api_key,
+            model=resolved_settings.review_model,
+            base_url=resolved_settings.openai_base_url,
+            timeout_seconds=resolved_settings.review_timeout_seconds,
+            client=client,
+        )
+    raise RuntimeError(f"Unsupported review provider: {provider}")

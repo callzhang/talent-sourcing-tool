@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { api } from "../api";
-import type { Job, JobWithRubric, SearchChannel } from "../types";
+import type { Job, JobWithRubric, SearchChannel, SystemStatus } from "../types";
 
 const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
   { value: "linkedin", label: "LinkedIn" },
@@ -14,11 +14,17 @@ const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
 
 type JobsPageProps = {
   selectedJobId: string | null;
+  systemStatus?: SystemStatus | null;
   onSelectJob: (jobId: string) => void;
   onCreatedJob: (job: JobWithRubric) => void;
 };
 
-export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageProps) {
+export function JobsPage({
+  selectedJobId,
+  systemStatus = null,
+  onSelectJob,
+  onCreatedJob
+}: JobsPageProps) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [activeJob, setActiveJob] = useState<JobWithRubric | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -36,6 +42,9 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
   ]);
   const [status, setStatus] = useState("Loading jobs...");
   const [isSaving, setIsSaving] = useState(false);
+  const jobsBlockedByStorage =
+    systemStatus?.environment === "vercel" &&
+    !systemStatus.capabilities.persistent_storage_configured;
 
   useEffect(() => {
     let ignore = false;
@@ -87,6 +96,10 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (jobsBlockedByStorage) {
+      setStatus("Job creation is disabled in this deployment until durable database storage is configured.");
+      return;
+    }
     setIsSaving(true);
     setStatus("Generating rubric...");
     try {
@@ -117,11 +130,21 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
         <p className="section-kicker">Jobs</p>
         <div className="split-heading">
           <h2 id="jobs-heading">Job listings</h2>
-          <button type="button" className="secondary-action" onClick={startNewJob}>
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={startNewJob}
+            disabled={jobsBlockedByStorage}
+          >
             New Job
           </button>
         </div>
         <p className="muted">{status}</p>
+        {jobsBlockedByStorage ? (
+          <p className="muted">
+            Job creation is blocked in production until durable database storage is configured.
+          </p>
+        ) : null}
         <div className="job-list">
           {jobs.map((job) => (
             <button
@@ -151,6 +174,7 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
               searchNotes={searchNotes}
               searchChannels={searchChannels}
               isSaving={isSaving}
+              jobsBlockedByStorage={jobsBlockedByStorage}
               onTitleChange={setTitle}
               onDescriptionChange={setDescription}
               onRegionChange={setRegion}
@@ -177,6 +201,10 @@ export function JobsPage({ selectedJobId, onSelectJob, onCreatedJob }: JobsPageP
   );
 
   function startNewJob() {
+    if (jobsBlockedByStorage) {
+      setStatus("Job creation is disabled in this deployment until durable database storage is configured.");
+      return;
+    }
     setIsCreating(true);
     setActiveJob(null);
     setTitle("");
@@ -253,6 +281,7 @@ type JobFormProps = {
   searchNotes: string;
   searchChannels: SearchChannel[];
   isSaving: boolean;
+  jobsBlockedByStorage: boolean;
   onTitleChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
   onRegionChange: (value: string) => void;
@@ -272,6 +301,7 @@ function JobForm({
   searchNotes,
   searchChannels,
   isSaving,
+  jobsBlockedByStorage,
   onTitleChange,
   onDescriptionChange,
   onRegionChange,
@@ -316,7 +346,7 @@ function JobForm({
         <textarea value={searchNotes} onChange={(event) => onSearchNotesChange(event.target.value)} />
       </label>
       <SearchChannelField value={searchChannels} onChange={onSearchChannelsChange} />
-      <button className="primary-action" type="submit" disabled={isSaving}>
+      <button className="primary-action" type="submit" disabled={isSaving || jobsBlockedByStorage}>
         Save Job
       </button>
     </form>

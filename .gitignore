@@ -18,5 +18,9 @@ node_modules/
 review-workspaces/
 graphify-out/
 .superpowers/
+.tmp/
 coverage/
 .DS_Store
+.vercel
+frontend/playwright-report/
+frontend/test-results/

@@ -4,19 +4,27 @@ import type {
   DraftPassReason,
   Job,
   JobWithRubric,
+  ReviewJob,
   RefinementSuggestion,
   ReviewRead,
   ReviewStartResult,
   SearchChannel,
   SearchRun,
   SearchRunDetail,
-  SearchRunResult
+  SearchRunResult,
+  ProviderChecks,
+  SystemStatus
 } from "./types";
 
-const DEFAULT_API_BASE_URL = "http://localhost:8000";
+function defaultApiBaseUrl(): string {
+  const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
+  if (configuredBaseUrl) {
+    return configuredBaseUrl;
+  }
+  return "";
+}
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? DEFAULT_API_BASE_URL;
+export const API_BASE_URL = defaultApiBaseUrl();
 
 type ApiErrorDetail = string | Record<string, unknown> | Array<Record<string, unknown>>;
 
@@ -145,9 +153,24 @@ export const api = {
   startReview(payload: StartReviewPayload) {
     return request<ReviewStartResult>("/api/reviews/start", { method: "POST", body: payload });
   },
+  runReviewJob(reviewJobId: string) {
+    return request<ReviewJob>(`/api/reviews/jobs/${encodeURIComponent(reviewJobId)}/run`, {
+      method: "POST"
+    });
+  },
+  getReviewJob(reviewJobId: string) {
+    return request<ReviewJob>(`/api/reviews/jobs/${encodeURIComponent(reviewJobId)}`);
+  },
   getLatestReview(jobId: string, candidateId: string) {
     return request<ReviewRead | null>(
       `/api/reviews/latest?job_id=${encodeURIComponent(jobId)}&candidate_id=${encodeURIComponent(
+        candidateId
+      )}`
+    );
+  },
+  getLatestReviewJob(jobId: string, candidateId: string) {
+    return request<ReviewJob | null>(
+      `/api/reviews/latest-job?job_id=${encodeURIComponent(jobId)}&candidate_id=${encodeURIComponent(
         candidateId
       )}`
     );
@@ -161,6 +184,12 @@ export const api = {
     return request<RefinementSuggestion[]>(
       `/api/reviews/refinements?job_id=${encodeURIComponent(jobId)}`
     );
+  },
+  getSystemStatus() {
+    return request<SystemStatus>("/api/system/status");
+  },
+  getProviderChecks() {
+    return request<ProviderChecks>("/api/system/provider-checks");
   },
   createDecision(payload: CreateDecisionPayload) {
     return request<CandidateDecision>("/api/reviews/decision", {

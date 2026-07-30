@@ -66,35 +66,36 @@ def seed_review_inputs(engine: Engine) -> tuple[str, str]:
         return job.id, candidate.id
 
 
-def test_start_review_stores_review_and_completed_review_job(
+def test_start_review_returns_pending_then_run_review_job_completes_review(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     job_id, candidate_id = seed_review_inputs(engine)
 
-    def fake_run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        input_path = workspace / "input.json"
-        output_path = workspace / "review.json"
-        input_path.write_text("{}")
-        output_path.write_text("{}")
-        return ReviewWorkerResult(
-            workspace=workspace,
-            input_path=input_path,
-            output_path=output_path,
-            review={
-                "candidate_id": payload["candidate"]["id"],
-                "job_id": payload["job"]["id"],
-                "overall_score": 8.5,
-                "recommendation": "proceed",
-                "decision_summary": "Strong builder evidence.",
-                "evidence": [{"label": "prototype", "detail": "Built AI apps"}],
-            },
-        )
-
     from app.api import reviews
 
-    monkeypatch.setattr(reviews.ReviewWorker, "run_review", fake_run_review)
+    class FakeRunner:
+        def run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+            workspace = tmp_path / "workspace"
+            workspace.mkdir()
+            input_path = workspace / "input.json"
+            output_path = workspace / "review.json"
+            input_path.write_text("{}")
+            output_path.write_text("{}")
+            return ReviewWorkerResult(
+                workspace=workspace,
+                input_path=input_path,
+                output_path=output_path,
+                review={
+                    "candidate_id": payload["candidate"]["id"],
+                    "job_id": payload["job"]["id"],
+                    "overall_score": 8.5,
+                    "recommendation": "proceed",
+                    "decision_summary": "Strong builder evidence.",
+                    "evidence": [{"label": "prototype", "detail": "Built AI apps"}],
+                },
+            )
+
+    monkeypatch.setattr(reviews, "build_review_runner", lambda _settings: FakeRunner())
 
     response = client.post(
         "/api/reviews/start",
@@ -104,9 +105,17 @@ def test_start_review_stores_review_and_completed_review_job(
     assert response.status_code == 200
     data = response.json()
     assert data["review_job_id"].startswith("review_job_")
-    assert data["review_id"].startswith("review_")
-    assert data["review"]["overall_score"] == 8.5
-    assert data["review"]["recommendation"] == "proceed"
+    assert data["status"] == "pending"
+    assert data["review_id"] is None
+    assert data["review"] is None
+
+    review_job_response = client.post(f"/api/reviews/jobs/{data['review_job_id']}/run")
+    assert review_job_response.status_code == 200
+    review_job_data = review_job_response.json()
+    assert review_job_data["status"] == "completed"
+    assert review_job_data["review_id"].startswith("review_")
+    assert review_job_data["review"]["overall_score"] == 8.5
+    assert review_job_data["review"]["recommendation"] == "proceed"
 
     with Session(engine) as session:
         review_job = session.exec(select(ReviewJob)).one()
@@ -121,40 +130,189 @@ def test_start_review_stores_review_and_completed_review_job(
     assert review.score == 8.5
 
 
-def test_start_review_marks_job_failed_when_worker_output_breaks_persistence(
+def test_get_review_job_returns_status_and_attached_review(client: TestClient, engine: Engine):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        review_job = ReviewJob(job_id=job_id, candidate_id=candidate_id, status="completed")
+        session.add(review_job)
+        session.commit()
+        session.refresh(review_job)
+        review_job_id = review_job.id
+        session.add(
+            Review(
+                review_job_id=review_job_id,
+                summary="Completed review summary.",
+                evidence=[{"label": "Signal", "detail": "Strong builder evidence"}],
+                recommendation="proceed",
+                score=8.1,
+                raw_review={
+                    "candidate_id": candidate_id,
+                    "job_id": job_id,
+                    "decision_summary": "Completed review summary.",
+                    "recommendation": "proceed",
+                    "overall_score": 8.1,
+                    "evidence": [{"label": "Signal", "detail": "Strong builder evidence"}],
+                },
+            )
+        )
+        session.commit()
+
+    response = client.get(f"/api/reviews/jobs/{review_job_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == review_job_id
+    assert data["status"] == "completed"
+    assert data["review_id"].startswith("review_")
+    assert data["review"]["decision_summary"] == "Completed review summary."
+
+
+def test_get_review_job_does_not_execute_pending_review_job(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        review_job = ReviewJob(job_id=job_id, candidate_id=candidate_id, status="pending")
+        session.add(review_job)
+        session.commit()
+        session.refresh(review_job)
+        review_job_id = review_job.id
+
+    from app.api import reviews
+
+    class FailIfInvokedRunner:
+        def run_review(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+            raise AssertionError("GET /reviews/jobs should not execute the review job")
+
+    monkeypatch.setattr(reviews, "build_review_runner", lambda _settings: FailIfInvokedRunner())
+
+    response = client.get(f"/api/reviews/jobs/{review_job_id}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"
+
+
+def test_get_latest_review_job_returns_pending_job_without_review(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        review_job = ReviewJob(job_id=job_id, candidate_id=candidate_id, status="pending")
+        session.add(review_job)
+        session.commit()
+        session.refresh(review_job)
+        review_job_id = review_job.id
+
+    response = client.get(
+        f"/api/reviews/latest-job?job_id={job_id}&candidate_id={candidate_id}"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == review_job_id
+    assert data["status"] == "pending"
+    assert data["review_id"] is None
+    assert data["review"] is None
+
+
+def test_get_review_job_404s_when_missing(client: TestClient):
+    response = client.get("/api/reviews/jobs/review_job_missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Review job not found"
+
+
+def test_start_review_normalizes_string_evidence_from_worker(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     job_id, candidate_id = seed_review_inputs(engine)
 
-    def fake_run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        input_path = workspace / "input.json"
-        output_path = workspace / "review.json"
-        return ReviewWorkerResult(
-            workspace=workspace,
-            input_path=input_path,
-            output_path=output_path,
-            review={
-                "candidate_id": payload["candidate"]["id"],
-                "job_id": payload["job"]["id"],
-                "overall_score": "not-a-number",
-                "recommendation": "proceed",
-                "decision_summary": "Invalid score should fail persistence.",
-            },
-        )
-
     from app.api import reviews
 
-    monkeypatch.setattr(reviews.ReviewWorker, "run_review", fake_run_review)
+    class FakeRunner:
+        def run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+            workspace = tmp_path / "workspace"
+            workspace.mkdir()
+            input_path = workspace / "input.json"
+            output_path = workspace / "review.json"
+            input_path.write_text("{}")
+            output_path.write_text("{}")
+            return ReviewWorkerResult(
+                workspace=workspace,
+                input_path=input_path,
+                output_path=output_path,
+                review={
+                    "candidate_id": payload["candidate"]["id"],
+                    "job_id": payload["job"]["id"],
+                    "overall_score": 4.9,
+                    "recommendation": "pass",
+                    "decision_summary": "Limited match for the role.",
+                    "evidence": ["Public paper only", "No management record"],
+                },
+            )
+
+    monkeypatch.setattr(reviews, "build_review_runner", lambda _settings: FakeRunner())
 
     response = client.post(
         "/api/reviews/start",
         json={"candidate_id": candidate_id, "job_id": job_id},
     )
 
-    assert response.status_code == 502
-    assert "not-a-number" in response.json()["detail"]
+    assert response.status_code == 200
+    data = client.post(f"/api/reviews/jobs/{response.json()['review_job_id']}/run").json()
+    assert data["review"]["evidence"] == [
+        {"label": "Evidence 1", "detail": "Public paper only"},
+        {"label": "Evidence 2", "detail": "No management record"},
+    ]
+
+    with Session(engine) as session:
+        review = session.exec(select(Review)).one()
+
+    assert review.evidence == [
+        {"label": "Evidence 1", "detail": "Public paper only"},
+        {"label": "Evidence 2", "detail": "No management record"},
+    ]
+    assert review.raw_review["evidence"] == review.evidence
+
+
+def test_start_review_marks_job_failed_when_worker_output_breaks_persistence(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    from app.api import reviews
+
+    class FakeRunner:
+        def run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+            workspace = tmp_path / "workspace"
+            workspace.mkdir()
+            input_path = workspace / "input.json"
+            output_path = workspace / "review.json"
+            return ReviewWorkerResult(
+                workspace=workspace,
+                input_path=input_path,
+                output_path=output_path,
+                review={
+                    "candidate_id": payload["candidate"]["id"],
+                    "job_id": payload["job"]["id"],
+                    "overall_score": "not-a-number",
+                    "recommendation": "proceed",
+                    "decision_summary": "Invalid score should fail persistence.",
+                },
+            )
+
+    monkeypatch.setattr(reviews, "build_review_runner", lambda _settings: FakeRunner())
+
+    start_response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert start_response.status_code == 200
+    review_job_response = client.post(f"/api/reviews/jobs/{start_response.json()['review_job_id']}/run")
+    assert review_job_response.status_code == 200
+    assert review_job_response.json()["status"] == "failed"
+    assert "not-a-number" in review_job_response.json()["error_message"]
 
     with Session(engine) as session:
         review_job = session.exec(select(ReviewJob)).one()
@@ -183,37 +341,41 @@ def test_start_review_rejects_worker_output_for_wrong_job_or_candidate(
 ):
     job_id, candidate_id = seed_review_inputs(engine)
 
-    def fake_run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        input_path = workspace / "input.json"
-        output_path = workspace / "review.json"
-        review = {
-            "candidate_id": payload["candidate"]["id"],
-            "job_id": payload["job"]["id"],
-            "overall_score": 8.5,
-            "recommendation": "proceed",
-            "decision_summary": "This output is for the wrong entity.",
-        }
-        review[review_job_id_key] = wrong_value
-        return ReviewWorkerResult(
-            workspace=workspace,
-            input_path=input_path,
-            output_path=output_path,
-            review=review,
-        )
-
     from app.api import reviews
 
-    monkeypatch.setattr(reviews.ReviewWorker, "run_review", fake_run_review)
+    class FakeRunner:
+        def run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+            workspace = tmp_path / "workspace"
+            workspace.mkdir()
+            input_path = workspace / "input.json"
+            output_path = workspace / "review.json"
+            review = {
+                "candidate_id": payload["candidate"]["id"],
+                "job_id": payload["job"]["id"],
+                "overall_score": 8.5,
+                "recommendation": "proceed",
+                "decision_summary": "This output is for the wrong entity.",
+            }
+            review[review_job_id_key] = wrong_value
+            return ReviewWorkerResult(
+                workspace=workspace,
+                input_path=input_path,
+                output_path=output_path,
+                review=review,
+            )
 
-    response = client.post(
+    monkeypatch.setattr(reviews, "build_review_runner", lambda _settings: FakeRunner())
+
+    start_response = client.post(
         "/api/reviews/start",
         json={"candidate_id": candidate_id, "job_id": job_id},
     )
 
-    assert response.status_code == 502
-    assert "does not match review job" in response.json()["detail"]
+    assert start_response.status_code == 200
+    review_job_response = client.post(f"/api/reviews/jobs/{start_response.json()['review_job_id']}/run")
+    assert review_job_response.status_code == 200
+    assert review_job_response.json()["status"] == "failed"
+    assert "does not match review job" in review_job_response.json()["error_message"]
 
     with Session(engine) as session:
         review_job = session.exec(select(ReviewJob)).one()
@@ -262,24 +424,166 @@ def test_start_review_marks_failed_when_worker_raises(
 ):
     job_id, candidate_id = seed_review_inputs(engine)
 
-    def fail_run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
-        raise RuntimeError("worker unavailable")
+    from app.api import reviews
+
+    class FailingRunner:
+        def run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+            raise RuntimeError("worker unavailable")
+
+    monkeypatch.setattr(reviews, "build_review_runner", lambda _settings: FailingRunner())
+
+    start_response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert start_response.status_code == 200
+    review_job_response = client.post(f"/api/reviews/jobs/{start_response.json()['review_job_id']}/run")
+    assert review_job_response.status_code == 200
+    assert review_job_response.json()["status"] == "failed"
+    assert review_job_response.json()["error_message"] == "worker unavailable"
+    with Session(engine) as session:
+        review_job = session.exec(select(ReviewJob)).one()
+    assert review_job.status == "failed"
+    assert review_job.error_message == "worker unavailable"
+
+
+def test_start_review_marks_failed_when_worker_cannot_be_built(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id, candidate_id = seed_review_inputs(engine)
 
     from app.api import reviews
 
-    monkeypatch.setattr(reviews.ReviewWorker, "run_review", fail_run_review)
+    def fail_build_review_runner(_settings):  # noqa: ANN001, ANN202
+        raise RuntimeError("openai review provider requires TALENT_OPENAI_API_KEY or OPENAI_API_KEY")
+
+    monkeypatch.setattr(reviews, "build_review_runner", fail_build_review_runner)
+
+    start_response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert start_response.status_code == 200
+    review_job_response = client.post(f"/api/reviews/jobs/{start_response.json()['review_job_id']}/run")
+    assert review_job_response.status_code == 200
+    assert review_job_response.json()["status"] == "failed"
+    assert (
+        review_job_response.json()["error_message"]
+        == "openai review provider requires TALENT_OPENAI_API_KEY or OPENAI_API_KEY"
+    )
+    with Session(engine) as session:
+        review_job = session.exec(select(ReviewJob)).one()
+    assert review_job.status == "failed"
+    assert (
+        review_job.error_message
+        == "openai review provider requires TALENT_OPENAI_API_KEY or OPENAI_API_KEY"
+    )
+
+
+def test_start_review_is_blocked_on_vercel_without_durable_storage(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    from app.core import deployment_guard
+
+    job_id, candidate_id = seed_review_inputs(engine)
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(
+        deployment_guard.settings, "database_url", "sqlite:////tmp/talent_sourcing.sqlite3"
+    )
 
     response = client.post(
         "/api/reviews/start",
         json={"candidate_id": candidate_id, "job_id": job_id},
     )
 
-    assert response.status_code == 502
-    assert response.json()["detail"] == "worker unavailable"
-    with Session(engine) as session:
-        review_job = session.exec(select(ReviewJob)).one()
-    assert review_job.status == "failed"
-    assert review_job.error_message == "worker unavailable"
+    assert response.status_code == 503
+    assert "durable storage is configured" in response.json()["detail"]
+
+
+def test_create_decision_is_blocked_on_vercel_without_durable_storage(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    from app.core import deployment_guard
+
+    job_id, candidate_id = seed_review_inputs(engine)
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(
+        deployment_guard.settings, "database_url", "sqlite:////tmp/talent_sourcing.sqlite3"
+    )
+
+    response = client.post(
+        "/api/reviews/decision",
+        json={
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "decision": "proceed",
+        },
+    )
+
+    assert response.status_code == 503
+    assert "durable storage is configured" in response.json()["detail"]
+
+
+def test_start_review_is_blocked_on_vercel_without_openai_review_config(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    from app.core import deployment_guard
+
+    job_id, candidate_id = seed_review_inputs(engine)
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(deployment_guard.settings, "database_url", "postgresql://example")
+    monkeypatch.setattr(deployment_guard.settings, "review_provider", "openai")
+    monkeypatch.setattr(deployment_guard.settings, "openai_api_key", "")
+
+    response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert response.status_code == 503
+    assert "TALENT_OPENAI_API_KEY" in response.json()["detail"]
+
+
+def test_start_review_does_not_run_worker_until_review_job_is_polled(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    calls: list[str] = []
+
+    from app.api import reviews
+
+    class FakeRunner:
+        def run_review(self, review_job_id, payload):  # noqa: ANN001, ANN202
+            calls.append(review_job_id)
+            return ReviewWorkerResult(
+                workspace=None,
+                input_path=None,
+                output_path=None,
+                review={
+                    "candidate_id": payload["candidate"]["id"],
+                    "job_id": payload["job"]["id"],
+                    "overall_score": 7.0,
+                    "recommendation": "proceed",
+                    "decision_summary": "Deferred run completed.",
+                },
+            )
+
+    monkeypatch.setattr(reviews, "build_review_runner", lambda _settings: FakeRunner())
+
+    start_response = client.post(
+        "/api/reviews/start",
+        json={"candidate_id": candidate_id, "job_id": job_id},
+    )
+
+    assert start_response.status_code == 200
+    assert calls == []
+
+    review_job_response = client.post(f"/api/reviews/jobs/{start_response.json()['review_job_id']}/run")
+    assert review_job_response.status_code == 200
+    assert review_job_response.json()["status"] == "completed"
+    assert len(calls) == 1
 
 
 def test_review_helpers_cover_defensive_paths(engine: Engine):
@@ -428,6 +732,24 @@ def test_get_latest_review_404s_for_missing_job_or_candidate(
     assert missing_candidate_response.json()["detail"] == "Candidate not found"
 
 
+def test_get_latest_review_job_404s_for_missing_job_or_candidate(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+
+    missing_job_response = client.get(
+        f"/api/reviews/latest-job?job_id=job_missing&candidate_id={candidate_id}"
+    )
+    assert missing_job_response.status_code == 404
+    assert missing_job_response.json()["detail"] == "Job not found"
+
+    missing_candidate_response = client.get(
+        f"/api/reviews/latest-job?job_id={job_id}&candidate_id=candidate_missing"
+    )
+    assert missing_candidate_response.status_code == 404
+    assert missing_candidate_response.json()["detail"] == "Candidate not found"
+
+
 def test_get_latest_review_returns_null_when_review_job_has_no_review(
     client: TestClient, engine: Engine
 ):
@@ -440,6 +762,40 @@ def test_get_latest_review_returns_null_when_review_job_has_no_review(
 
     assert response.status_code == 200
     assert response.json() is None
+
+
+def test_get_latest_review_normalizes_legacy_string_evidence(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id = seed_review_inputs(engine)
+    with Session(engine) as session:
+        review_job = ReviewJob(job_id=job_id, candidate_id=candidate_id, status="completed")
+        session.add(review_job)
+        session.commit()
+        session.refresh(review_job)
+        session.add(
+            Review(
+                review_job_id=review_job.id,
+                summary="Legacy string evidence review.",
+                evidence=["Published paper only"],
+                recommendation="pass",
+                score=4.9,
+                raw_review={
+                    "decision_summary": "Legacy string evidence review.",
+                    "overall_score": 4.9,
+                    "recommendation": "pass",
+                    "evidence": ["Published paper only"],
+                },
+            )
+        )
+        session.commit()
+
+    response = client.get(f"/api/reviews/latest?job_id={job_id}&candidate_id={candidate_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["evidence"] == [{"label": "Evidence 1", "detail": "Published paper only"}]
+    assert data["review"]["evidence"] == [{"label": "Evidence 1", "detail": "Published paper only"}]
 
 
 def test_read_review_404s_when_review_job_is_missing(engine: Engine):

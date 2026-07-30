@@ -6,7 +6,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("uses the default backend base URL for requests", async () => {
+it("uses relative API paths by default", async () => {
   const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(JSON.stringify([]), {
       status: 200,
@@ -16,7 +16,7 @@ it("uses the default backend base URL for requests", async () => {
 
   await api.listJobs();
 
-  expect(fetchMock).toHaveBeenCalledWith("http://localhost:8000/api/jobs", {
+  expect(fetchMock).toHaveBeenCalledWith("/api/jobs", {
     headers: { "Content-Type": "application/json" }
   });
 });
@@ -92,29 +92,38 @@ it("exposes read endpoints needed by the task pages", async () => {
   await api.listCandidates("job_1");
   await api.getCandidate("candidate_1", "job_1");
   await api.getLatestReview("job_1", "candidate_1");
+  await api.runReviewJob("review_job_1");
+  await api.getSystemStatus();
 
-  expect(fetchMock).toHaveBeenNthCalledWith(1, "http://localhost:8000/api/jobs/job_1", {
+  expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/jobs/job_1", {
     headers: { "Content-Type": "application/json" }
   });
-  expect(fetchMock).toHaveBeenNthCalledWith(2, "http://localhost:8000/api/search?job_id=job_1", {
+  expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/search?job_id=job_1", {
     headers: { "Content-Type": "application/json" }
   });
-  expect(fetchMock).toHaveBeenNthCalledWith(3, "http://localhost:8000/api/search/search_run_1", {
+  expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/search/search_run_1", {
     headers: { "Content-Type": "application/json" }
   });
   expect(fetchMock).toHaveBeenNthCalledWith(
     4,
-    "http://localhost:8000/api/candidates?job_id=job_1",
+    "/api/candidates?job_id=job_1",
     { headers: { "Content-Type": "application/json" } }
   );
   expect(fetchMock).toHaveBeenNthCalledWith(
     5,
-    "http://localhost:8000/api/candidates/candidate_1?job_id=job_1",
+    "/api/candidates/candidate_1?job_id=job_1",
     { headers: { "Content-Type": "application/json" } }
   );
   expect(fetchMock).toHaveBeenNthCalledWith(
     6,
-    "http://localhost:8000/api/reviews/latest?job_id=job_1&candidate_id=candidate_1",
+    "/api/reviews/latest?job_id=job_1&candidate_id=candidate_1",
     { headers: { "Content-Type": "application/json" } }
   );
+  expect(fetchMock).toHaveBeenNthCalledWith(7, "/api/reviews/jobs/review_job_1/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" }
+  });
+  expect(fetchMock).toHaveBeenNthCalledWith(8, "/api/system/status", {
+    headers: { "Content-Type": "application/json" }
+  });
 });

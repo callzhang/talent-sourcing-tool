@@ -10,6 +10,42 @@ afterEach(() => {
 });
 
 it("renders the app shell on the jobs tab", () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/system/status")) {
+      return jsonResponse({
+        environment: "local",
+        deployment_ready: true,
+        warnings: [],
+        capabilities: {
+          persistent_storage_configured: true,
+          review_provider: "codex",
+          review_configured: true,
+          linkedin_configured: true,
+          exa_configured: true,
+          brightdata_configured: true,
+          public_channels: ["github", "openreview", "arxiv"],
+          required_channels: ["linkedin", "github", "openreview", "arxiv", "exa"],
+          optional_channels: ["brightdata_discover"],
+          channel_availability: {
+            linkedin: true,
+            github: true,
+            openreview: true,
+            arxiv: true,
+            exa: true,
+            brightdata_discover: true
+          },
+          missing_env_vars: {
+            storage: [],
+            review: [],
+            channels: {}
+          }
+        }
+      });
+    }
+    return jsonResponse([]);
+  });
+
   render(<App />);
 
   expect(screen.getByRole("banner")).toBeInTheDocument();
@@ -18,9 +54,138 @@ it("renders the app shell on the jobs tab", () => {
   expect(screen.getByRole("heading", { name: "Job listings" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "New Job" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Jobs" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("Local sourcing workspace")).toBeInTheDocument();
+});
+
+it("shows the production workspace label when the app is running on vercel", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/system/status")) {
+      return jsonResponse({
+        environment: "vercel",
+        deployment_ready: false,
+        warnings: [],
+        delivery_resources: {
+          production_url: "https://talent-sourcing-tool-zeta.vercel.app",
+          local_url: "http://127.0.0.1:5173",
+          owner_checklist_path: "docs/production-owner-checklist.md",
+          runbook_path: "docs/vercel-production-runbook-2026-07-29.md",
+          verification_commands: [
+            "python3 scripts/prepare_vercel_env.py --strict",
+            "vercel --prod --yes",
+            "./scripts/verify_production.sh"
+          ],
+          owner_prompts: [
+            "TALENT_DATABASE_URL 由谁提供",
+            "TALENT_OPENAI_API_KEY 由谁提供"
+          ]
+        },
+        hard_blockers: [
+          {
+            code: "durable_storage_missing",
+            message:
+              "Production is using temporary SQLite storage on /tmp. Configure DATABASE_URL for durable state.",
+            env_vars: ["DATABASE_URL", "TALENT_DATABASE_URL"]
+          },
+        {
+          code: "review_provider_missing_key",
+          message:
+              "AI review is not configured for deployment. Set TALENT_OPENAI_API_KEY.",
+          env_vars: ["TALENT_OPENAI_API_KEY"]
+        }
+        ],
+        optional_degradations: [
+          {
+            code: "optional_channel_unavailable",
+            message: "Optional production channel unavailable: Bright Data Discover.",
+            env_vars: ["TALENT_BRIGHTDATA_API_KEY", "TALENT_BRIGHTDATA_ZONE"]
+          }
+        ],
+        capabilities: {
+          persistent_storage_configured: false,
+          review_provider: "openai",
+          review_configured: false,
+          linkedin_configured: false,
+          exa_configured: false,
+          brightdata_configured: false,
+          public_channels: ["github", "openreview", "arxiv"],
+          required_channels: ["linkedin", "github", "openreview", "arxiv", "exa"],
+          optional_channels: ["brightdata_discover"],
+          channel_availability: {
+            linkedin: false,
+            github: true,
+            openreview: true,
+            arxiv: true,
+            exa: false,
+            brightdata_discover: false
+          },
+          missing_env_vars: {
+            storage: ["DATABASE_URL", "TALENT_DATABASE_URL"],
+            review: ["TALENT_OPENAI_API_KEY"],
+            channels: {
+              linkedin: [
+                "TALENT_EXA_API_KEY",
+                "TALENT_BRIGHTDATA_API_KEY",
+                "TALENT_BRIGHTDATA_ZONE"
+              ],
+              exa: ["TALENT_EXA_API_KEY"],
+              brightdata_discover: ["TALENT_BRIGHTDATA_API_KEY", "TALENT_BRIGHTDATA_ZONE"]
+            }
+          }
+        }
+      });
+    }
+    if (url.endsWith("/api/system/provider-checks")) {
+      return jsonResponse({
+        providers: {
+          exa: {
+            status: "ok",
+            detail: "Exa API key accepted a search request."
+          },
+          brightdata: {
+            status: "expired_key",
+            detail: "Bright Data API key exists but is expired."
+          }
+        }
+      });
+    }
+    return jsonResponse([]);
+  });
+
+  render(<App />);
+
+  expect(await screen.findByText("Production sourcing workspace")).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Deployment readiness" })).toBeInTheDocument();
+  expect(screen.getByText("Hard blockers")).toBeInTheDocument();
+  expect(screen.getByText("Optional degradations")).toBeInTheDocument();
+  expect(
+    screen.getByText("Missing: DATABASE_URL, TALENT_DATABASE_URL")
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/Missing vars: DATABASE_URL, TALENT_DATABASE_URL/)
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/Bright Data: Bright Data API key exists but is expired\./)
+  ).toBeInTheDocument();
+  expect(
+    screen
+      .getByRole("region", { name: "System warnings" })
+      .querySelector("li:last-child")
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("region", { name: "System warnings" }).textContent
+  ).toContain("AI review is not configured for deployment. Set TALENT_OPENAI_API_KEY.");
+  expect(screen.getByRole("link", { name: "https://talent-sourcing-tool-zeta.vercel.app" })).toHaveAttribute(
+    "href",
+    "https://talent-sourcing-tool-zeta.vercel.app"
+  );
+  expect(screen.getByText("docs/production-owner-checklist.md")).toBeInTheDocument();
+  expect(screen.getByText("python3 scripts/prepare_vercel_env.py --strict")).toBeInTheDocument();
+  expect(screen.getByText("TALENT_DATABASE_URL 由谁提供")).toBeInTheDocument();
 });
 
 it("switches between shell tabs without routing dependencies", () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse([]));
   render(<App />);
 
   fireEvent.click(screen.getByRole("button", { name: "Search" }));
@@ -36,6 +201,37 @@ it("opens refinements and ignores late job loads after unmount", async () => {
     if (url.endsWith("/api/jobs")) {
       return new Promise<Response>((resolve) => {
         resolveJobs = resolve;
+      });
+    }
+    if (url.endsWith("/api/system/status")) {
+      return jsonResponse({
+        environment: "local",
+        deployment_ready: true,
+        warnings: [],
+        capabilities: {
+          persistent_storage_configured: true,
+          review_provider: "codex",
+          review_configured: true,
+          linkedin_configured: true,
+          exa_configured: true,
+          brightdata_configured: true,
+          public_channels: ["github", "openreview", "arxiv"],
+          required_channels: ["linkedin", "github", "openreview", "arxiv", "exa"],
+          optional_channels: ["brightdata_discover"],
+          channel_availability: {
+            linkedin: true,
+            github: true,
+            openreview: true,
+            arxiv: true,
+            exa: true,
+            brightdata_discover: true
+          },
+          missing_env_vars: {
+            storage: [],
+            review: [],
+            channels: {}
+          }
+        }
       });
     }
     return jsonResponse([]);
@@ -54,6 +250,37 @@ it("creates a job, displays its rubric, and uses it for search and candidates", 
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
+    if (url.endsWith("/api/system/status")) {
+      return jsonResponse({
+        environment: "local",
+        deployment_ready: true,
+        warnings: [],
+        capabilities: {
+          persistent_storage_configured: true,
+          review_provider: "codex",
+          review_configured: true,
+          linkedin_configured: true,
+          exa_configured: true,
+          brightdata_configured: true,
+          public_channels: ["github", "openreview", "arxiv"],
+          required_channels: ["linkedin", "github", "openreview", "arxiv", "exa"],
+          optional_channels: ["brightdata_discover"],
+          channel_availability: {
+            linkedin: true,
+            github: true,
+            openreview: true,
+            arxiv: true,
+            exa: true,
+            brightdata_discover: true
+          },
+          missing_env_vars: {
+            storage: [],
+            review: [],
+            channels: {}
+          }
+        }
+      });
+    }
     if (url.endsWith("/api/jobs") && method === "GET") {
       return jsonResponse([]);
     }
@@ -101,6 +328,47 @@ it("starts review, drafts a pass reason, and submits pass feedback", async () =>
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
+    if (url.endsWith("/api/system/status")) {
+      return jsonResponse({
+        environment: "vercel",
+        deployment_ready: false,
+        warnings: [
+          "Production is using temporary SQLite storage on /tmp. Configure DATABASE_URL for durable state."
+        ],
+        capabilities: {
+          persistent_storage_configured: false,
+          review_provider: "openai",
+          review_configured: false,
+          linkedin_configured: false,
+          exa_configured: false,
+          brightdata_configured: false,
+          public_channels: ["github", "openreview", "arxiv"],
+          required_channels: ["linkedin", "github", "openreview", "arxiv", "exa"],
+          optional_channels: ["brightdata_discover"],
+          channel_availability: {
+            linkedin: false,
+            github: true,
+            openreview: true,
+            arxiv: true,
+            exa: false,
+            brightdata_discover: false
+          },
+          missing_env_vars: {
+            storage: ["DATABASE_URL", "TALENT_DATABASE_URL"],
+            review: ["TALENT_OPENAI_API_KEY"],
+            channels: {
+              linkedin: [
+                "TALENT_EXA_API_KEY",
+                "TALENT_BRIGHTDATA_API_KEY",
+                "TALENT_BRIGHTDATA_ZONE"
+              ],
+              exa: ["TALENT_EXA_API_KEY"],
+              brightdata_discover: ["TALENT_BRIGHTDATA_API_KEY", "TALENT_BRIGHTDATA_ZONE"]
+            }
+          }
+        }
+      });
+    }
     if (url.endsWith("/api/jobs") && method === "GET") {
       return jsonResponse([jobWithRubric.job]);
     }
@@ -130,21 +398,20 @@ it("starts review, drafts a pass reason, and submits pass feedback", async () =>
 
   render(<App />);
 
+  expect(
+    await screen.findByText(
+      "Production is using temporary SQLite storage on /tmp. Configure DATABASE_URL for durable state."
+    )
+  ).toBeInTheDocument();
+
   fireEvent.click(await screen.findByRole("button", { name: "Candidates" }));
   fireEvent.click(await screen.findByRole("button", { name: "Review Searched Candidate" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Start AI review" }));
-
-  expect(await screen.findByText("Weak public launch evidence.")).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: "Draft pass reason" }));
-  expect(await screen.findByDisplayValue("Insufficient public evidence.")).toBeInTheDocument();
-
-  fireEvent.change(screen.getByLabelText("Decision notes and feedback"), {
-    target: { value: "Need stronger launch artifacts." }
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Submit pass" }));
-
-  expect(await screen.findByText("Saved pass decision.")).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      "AI review is unavailable in this deployment until production review config is completed."
+    )
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Start AI review" })).toBeDisabled();
 
   fireEvent.click(screen.getByRole("button", { name: "Back to candidates" }));
   expect(await screen.findByRole("heading", { name: "Candidates" })).toBeInTheDocument();

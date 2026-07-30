@@ -7,7 +7,7 @@ from app.db.models import Candidate, SearchResult, SearchRun
 from app.db.session import get_session
 from app.schemas import CandidateListItem
 
-router = APIRouter(prefix="/api/candidates", tags=["candidates"])
+router = APIRouter(prefix="/candidates", tags=["candidates"])
 
 
 def latest_search_result_for_candidate(

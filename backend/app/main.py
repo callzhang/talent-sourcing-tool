@@ -10,6 +10,7 @@ from app.api.candidates import router as candidates_router
 from app.api.jobs import router as jobs_router
 from app.api.reviews import router as reviews_router
 from app.api.search import router as search_router
+from app.api.system import router as system_router
 from app.db.init_db import init_db
 
 
@@ -20,16 +21,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Talent Sourcing Tool", lifespan=lifespan)
-app.state.create_tables_on_startup = True
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.include_router(candidates_router)
-app.include_router(jobs_router)
-app.include_router(reviews_router)
-app.include_router(search_router)
+def register_api_routers(app: FastAPI, *, prefixes: list[str]) -> None:
+    for prefix in prefixes:
+        normalized_prefix = prefix.rstrip("/")
+        if normalized_prefix == "/":
+            normalized_prefix = ""
+        app.include_router(candidates_router, prefix=normalized_prefix)
+        app.include_router(jobs_router, prefix=normalized_prefix)
+        app.include_router(reviews_router, prefix=normalized_prefix)
+        app.include_router(search_router, prefix=normalized_prefix)
+        app.include_router(system_router, prefix=normalized_prefix)
+
+
+def create_app(*, api_prefix: str = "/api") -> FastAPI:
+    app = FastAPI(title="Talent Sourcing Tool", lifespan=lifespan)
+    app.state.create_tables_on_startup = True
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    register_api_routers(app, prefixes=[api_prefix])
+    return app
+
+
+app = create_app()

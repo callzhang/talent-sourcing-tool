@@ -5,6 +5,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
+from app.core.deployment_guard import require_persistent_storage_for_writes
 from app.db.models import Job, Rubric
 from app.db.session import get_session
 from app.schemas import JobCreate, JobRead, JobWithRubric, RubricRead
@@ -12,7 +13,7 @@ from app.services.job_titles import job_title_key, normalize_job_title
 from app.services.rubric import rubric_to_json
 from app.services.sourcing import default_job_search_channels, normalize_search_channels
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 def read_rubric(rubric: Rubric) -> RubricRead:
@@ -34,6 +35,7 @@ def read_job(job: Job) -> JobRead:
 
 @router.post("", response_model=JobWithRubric)
 def create_job(job_create: JobCreate, session: Session = Depends(get_session)) -> JobWithRubric:
+    require_persistent_storage_for_writes()
     normalized_title = normalize_job_title(job_create.title)
     title_key = job_title_key(normalized_title)
 

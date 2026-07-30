@@ -241,7 +241,17 @@ def test_search_requires_real_config_for_linkedin_channel(
     from app.api import search
     from app.services.sourcing import LiveSourcingConnector
 
-    monkeypatch.setattr(search, "get_sourcing_connector", lambda: LiveSourcingConnector())
+    class EmptySettings:
+        sourcing_provider = "live"
+        exa_api_key = ""
+        brightdata_api_key = ""
+        brightdata_zone = ""
+
+    monkeypatch.setattr(
+        search,
+        "get_sourcing_connector",
+        lambda: LiveSourcingConnector(EmptySettings()),
+    )
 
     response = client.post(
         "/api/search",
@@ -285,6 +295,30 @@ def test_search_marks_run_failed_when_connector_raises(
         search_run = session.exec(select(SearchRun)).one()
     assert search_run.status == "failed"
     assert search_run.run_metadata["error_message"] == "connector unavailable"
+
+
+def test_search_is_blocked_on_vercel_without_durable_storage(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    from app.core import deployment_guard
+
+    job_id = create_job(client)
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(
+        deployment_guard.settings, "database_url", "sqlite:////tmp/talent_sourcing.sqlite3"
+    )
+
+    response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "founding PMM AI startup",
+            "params": {"limit": 2},
+        },
+    )
+
+    assert response.status_code == 503
+    assert "durable storage is configured" in response.json()["detail"]
 
 
 def test_search_deduplicates_connector_results_by_canonical_profile_url(
@@ -442,6 +476,23 @@ def test_github_location_query_uses_city_only():
     assert github_location_query("San Francisco, CA") == "San Francisco"
 
 
+def test_live_sourcing_connector_ignores_proxy_environment():
+    from app.services.sourcing import LiveSourcingConnector
+
+    connector = LiveSourcingConnector()
+
+    assert connector.client.trust_env is False
+
+
+def test_canonical_profile_url_preserves_query_for_non_linkedin_profiles():
+    from app.services.sourcing import canonical_profile_url
+
+    assert (
+        canonical_profile_url("https://openreview.net/profile?id=~Fuad_Al_Abir2")
+        == "https://openreview.net/profile?id=~Fuad_Al_Abir2"
+    )
+
+
 def test_candidate_race_recovery_preserves_prior_search_results(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ):
@@ -483,6 +534,7 @@ def test_candidate_race_recovery_preserves_prior_search_results(
                 raw_data={"raw": {"rank": 1}},
             )
         )
+        session.commit()
 
         real_exec = session.exec
         stale_select_used = False
@@ -530,6 +582,34 @@ def test_candidate_race_recovery_preserves_prior_search_results(
         ).all()
 
     assert len(search_results) == 2
+
+
+def test_upsert_candidate_does_not_require_a_nested_transaction(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    from app.api import search
+
+    with Session(engine) as session:
+        def fail_if_nested_transaction_is_used():  # noqa: ANN202
+            pytest.fail("candidate upsert must not require a nested transaction")
+
+        monkeypatch.setattr(session, "begin_nested", fail_if_nested_transaction_is_used)
+
+        candidate = search.upsert_candidate(
+            session,
+            CandidateSourceResult(
+                profile_url="https://openreview.net/profile?id=~nested-transaction-test",
+                profile_source="openreview",
+                name="Nested Transaction Test",
+                headline="Researcher",
+                location="Remote",
+                current_company="Example Lab",
+                current_title="Researcher",
+                raw={},
+            ),
+        )
+        session.commit()
+        assert candidate.profile_source == "openreview"
 
 
 def test_search_result_payload_uses_profile_url_not_linkedin_url(

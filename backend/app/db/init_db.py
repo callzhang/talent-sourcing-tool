@@ -1,17 +1,23 @@
 import json
 
 from sqlalchemy import Engine, text
-from sqlmodel import SQLModel
+from sqlmodel import Session, SQLModel, select
 
 from app.db import models  # noqa: F401
+from app.db.models import Job, Rubric
 from app.db.session import engine
+from app.schemas import JobCreate
+from app.services.default_jobs import DEFAULT_JOBS
 from app.services.job_titles import normalize_job_title
+from app.services.job_titles import job_title_key
+from app.services.rubric import rubric_to_json
 from app.services.sourcing import default_job_search_channels, normalize_search_channels
 
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     migrate_existing_sqlite_schema(engine)
+    seed_default_jobs(engine)
 
 
 def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
@@ -127,6 +133,43 @@ def migrate_existing_sqlite_schema(db_engine: Engine) -> None:
                     "UPDATE candidate SET profile_source = COALESCE(NULLIF(profile_source, ''), 'linkedin')"
                 )
             )
+
+
+def seed_default_jobs(db_engine: Engine) -> None:
+    with Session(db_engine) as session:
+        existing_jobs = session.exec(select(Job).order_by(Job.created_at.desc())).all()
+        existing_title_keys = {job_title_key(job.title) for job in existing_jobs}
+        for job_create in DEFAULT_JOBS:
+            normalized_title = normalize_job_title(job_create.title)
+            title_key = job_title_key(normalized_title)
+            if title_key in existing_title_keys:
+                continue
+            create_seed_job(session, job_create, normalized_title)
+            existing_title_keys.add(title_key)
+        session.commit()
+
+
+def create_seed_job(session: Session, job_create: JobCreate, normalized_title: str) -> None:
+    rubric_payload = json.loads(rubric_to_json(job_create))
+    job = Job(
+        title=normalized_title,
+        description=job_create.description,
+        region=job_create.region.strip(),
+        target_profile_text=job_create.target_profile_text,
+        red_flags_text=job_create.red_flags_text,
+        search_notes=job_create.search_notes,
+        search_channels=normalize_search_channels(job_create.search_channels)
+        or default_job_search_channels(normalized_title, job_create.description),
+    )
+    session.add(job)
+    session.flush()
+    session.add(
+        Rubric(
+            job_id=job.id,
+            name=f"{job.title} Rubric",
+            criteria=[rubric_payload],
+        )
+    )
 
 
 if __name__ == "__main__":

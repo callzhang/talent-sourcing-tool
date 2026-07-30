@@ -1,7 +1,14 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
-import type { Candidate, Job, SearchChannel, SearchRun, SearchRunDetail } from "../types";
+import type {
+  Candidate,
+  Job,
+  SearchChannel,
+  SearchRun,
+  SearchRunDetail,
+  SystemStatus
+} from "../types";
 
 const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
   { value: "linkedin", label: "LinkedIn" },
@@ -15,6 +22,7 @@ const SEARCH_CHANNEL_OPTIONS: Array<{ value: SearchChannel; label: string }> = [
 type SearchPageProps = {
   jobs: Job[];
   selectedJobId: string | null;
+  systemStatus: SystemStatus | null;
   onSelectJob: (jobId: string) => void;
   onCandidatesFound: (candidates: Candidate[]) => void;
   onReviewCandidate: (candidate: Candidate) => void;
@@ -23,6 +31,7 @@ type SearchPageProps = {
 export function SearchPage({
   jobs,
   selectedJobId,
+  systemStatus,
   onSelectJob,
   onCandidatesFound,
   onReviewCandidate
@@ -35,11 +44,25 @@ export function SearchPage({
   const [status, setStatus] = useState("Choose a JD and create a search run.");
   const [isSearching, setIsSearching] = useState(false);
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null;
+  const availableChannels = useMemo(
+    () => searchChannelsForStatus(systemStatus),
+    [systemStatus]
+  );
+  const searchBlockedByStorage =
+    systemStatus?.environment === "vercel" &&
+    !systemStatus.capabilities.persistent_storage_configured;
 
   useEffect(() => {
     setQuery(searchQueryForJob(selectedJob));
-    setChannels(selectedJob?.search_channels ?? []);
-  }, [selectedJob]);
+    const preferredChannels = selectedJob?.search_channels ?? [];
+    const nextChannels =
+      availableChannels.length === 0
+        ? preferredChannels
+        : preferredChannels.filter((channel) => availableChannels.includes(channel));
+    setChannels((currentChannels) =>
+      sameChannels(currentChannels, nextChannels) ? currentChannels : nextChannels
+    );
+  }, [availableChannels, selectedJob]);
 
   useEffect(() => {
     if (!selectedJobId) {
@@ -80,6 +103,16 @@ export function SearchPage({
     event.preventDefault();
     if (!selectedJobId) {
       setStatus("Create or select a JD before searching.");
+      return;
+    }
+    if (searchBlockedByStorage) {
+      setStatus(
+        "Search is disabled in this deployment until production storage is configured."
+      );
+      return;
+    }
+    if (channels.length === 0) {
+      setStatus("No search channels are available in the current deployment.");
       return;
     }
     setIsSearching(true);
@@ -181,7 +214,11 @@ export function SearchPage({
               onChange={(event) => setLimit(event.target.value)}
             />
           </label>
-          <SearchChannelField value={channels} onChange={setChannels} />
+          <SearchChannelField
+            value={channels}
+            onChange={setChannels}
+            availableChannels={availableChannels}
+          />
           <div className="search-channel-summary" aria-live="polite">
             <span className="detail-label">Searching Channels</span>
             <strong>{formatChannels(channels)}</strong>
@@ -190,7 +227,16 @@ export function SearchPage({
             <span className="detail-label">Region</span>
             <strong>{selectedJob?.region.trim() || "No region specified"}</strong>
           </div>
-          <button className="primary-action" type="submit" disabled={isSearching}>
+          {searchBlockedByStorage ? (
+            <p className="muted">
+              Search is blocked in production until durable database storage is configured.
+            </p>
+          ) : null}
+          <button
+            className="primary-action"
+            type="submit"
+            disabled={isSearching || channels.length === 0 || searchBlockedByStorage}
+          >
             Create search run
           </button>
         </form>
@@ -223,10 +269,12 @@ export function SearchPage({
 
 function SearchChannelField({
   value,
-  onChange
+  onChange,
+  availableChannels
 }: {
   value: SearchChannel[];
   onChange: (channels: SearchChannel[]) => void;
+  availableChannels: SearchChannel[];
 }) {
   return (
     <fieldset className="channel-fieldset">
@@ -237,9 +285,13 @@ function SearchChannelField({
             <input
               type="checkbox"
               checked={value.includes(channel.value)}
+              disabled={!availableChannels.includes(channel.value)}
               onChange={() => onChange(toggleChannel(value, channel.value))}
             />
-            <span>{channel.label}</span>
+            <span>
+              {channel.label}
+              {!availableChannels.includes(channel.value) ? " (Unavailable)" : ""}
+            </span>
           </label>
         ))}
       </div>
@@ -254,6 +306,13 @@ function toggleChannel(current: SearchChannel[], channel: SearchChannel): Search
   return SEARCH_CHANNEL_OPTIONS.map((option) => option.value).filter(
     (value) => value === channel || current.includes(value)
   );
+}
+
+function sameChannels(current: SearchChannel[], next: SearchChannel[]): boolean {
+  if (current.length !== next.length) {
+    return false;
+  }
+  return current.every((channel, index) => channel === next[index]);
 }
 
 function channelLabel(channel: string): string {
@@ -279,6 +338,39 @@ function searchQueryForJob(job: Job | null): string {
   }
 
   return job.search_notes.trim() || job.description.trim() || job.title;
+}
+
+function searchChannelsForStatus(systemStatus: SystemStatus | null): SearchChannel[] {
+  if (systemStatus === null) {
+    return SEARCH_CHANNEL_OPTIONS.map((channel) => channel.value);
+  }
+
+  const channelAvailability = systemStatus.capabilities.channel_availability;
+  if (channelAvailability) {
+    return SEARCH_CHANNEL_OPTIONS.map((channel) => channel.value).filter(
+      (channel) => channelAvailability[channel] ?? false
+    );
+  }
+
+  const publicChannels = new Set(systemStatus.capabilities.public_channels as SearchChannel[]);
+  return SEARCH_CHANNEL_OPTIONS.map((channel) => channel.value).filter((channel) => {
+    if (publicChannels.has(channel)) {
+      return true;
+    }
+    if (channel === "exa") {
+      return systemStatus.capabilities.exa_configured;
+    }
+    if (channel === "linkedin") {
+      return systemStatus.capabilities.linkedin_configured ?? (
+        systemStatus.capabilities.exa_configured ||
+        systemStatus.capabilities.brightdata_configured
+      );
+    }
+    if (channel === "brightdata_discover") {
+      return systemStatus.capabilities.brightdata_configured;
+    }
+    return false;
+  });
 }
 
 function RunCandidates({

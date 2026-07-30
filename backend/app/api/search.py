@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app.core.deployment_guard import require_persistent_storage_for_writes
 from app.db.models import Candidate, Job, SearchResult, SearchRun
 from app.db.session import get_session
 from app.schemas import CandidateRead, SearchCreate, SearchRunDetail, SearchRunRead
@@ -19,7 +20,7 @@ from app.services.sourcing import (
     normalize_search_channels,
 )
 
-router = APIRouter(prefix="/api/search", tags=["search"])
+router = APIRouter(prefix="/search", tags=["search"])
 
 
 def json_safe_value(value: Any) -> Any:
@@ -123,11 +124,14 @@ def upsert_candidate(session: Session, result: CandidateSourceResult) -> Candida
                 "raw": result.raw,
             },
         )
+        session.add(candidate)
         try:
-            with session.begin_nested():
-                session.add(candidate)
-                session.flush()
+            session.flush()
         except IntegrityError:
+            # libSQL remote connections do not implement SQLite savepoints. Each
+            # prior search result is committed before the next candidate is flushed,
+            # so a uniqueness race can safely roll back only the current candidate.
+            session.rollback()
             candidate = session.exec(
                 select(Candidate).where(Candidate.profile_url == result.profile_url)
             ).one()
@@ -217,6 +221,7 @@ def get_search_run(
 def create_search(
     search_create: SearchCreate, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
+    require_persistent_storage_for_writes()
     job = session.get(Job, search_create.job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -269,6 +274,7 @@ def create_search(
                     },
                 )
             )
+            session.commit()
 
         search_run.status = "completed"
         search_run.completed_at = datetime.now(UTC)

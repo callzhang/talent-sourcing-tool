@@ -16,6 +16,7 @@ it("asks for a JD before loading candidates", () => {
       selectedJobId={null}
       jobs={[]}
       candidates={[]}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
@@ -35,6 +36,7 @@ it("loads searched candidates and sends selected candidate to review", async () 
       selectedJobId="job_1"
       jobs={[job]}
       candidates={[]}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onLoadedCandidates={onLoadedCandidates}
       onReviewCandidate={onReviewCandidate}
@@ -48,6 +50,7 @@ it("loads searched candidates and sends selected candidate to review", async () 
       selectedJobId="job_1"
       jobs={[job]}
       candidates={[candidate]}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onLoadedCandidates={onLoadedCandidates}
       onReviewCandidate={onReviewCandidate}
@@ -71,6 +74,7 @@ it("renders candidate listings in the left pane and selected candidate details i
       selectedJobId="job_1"
       jobs={[job]}
       candidates={[candidateWithEvidence]}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
@@ -107,6 +111,7 @@ it("defaults to the job for the latest candidate when the selected JD has no can
       selectedJobId="job_1"
       jobs={[job, pmmJob]}
       candidates={[]}
+      systemStatus={null}
       onSelectJob={onSelectJob}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
@@ -127,6 +132,7 @@ it("renders empty and error states for candidate loading", async () => {
       selectedJobId="job_1"
       jobs={[job]}
       candidates={[]}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
@@ -140,6 +146,7 @@ it("renders empty and error states for candidate loading", async () => {
       selectedJobId="job_2"
       jobs={[job, pmmJob]}
       candidates={[]}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
@@ -165,6 +172,7 @@ it("ignores candidate loads that resolve after unmount", async () => {
       selectedJobId="job_1"
       jobs={[job]}
       candidates={[]}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onLoadedCandidates={onLoadedCandidates}
       onReviewCandidate={() => undefined}
@@ -185,6 +193,7 @@ it("lets the user switch the JD used by the candidate queue", async () => {
       selectedJobId="job_1"
       jobs={[job, pmmJob]}
       candidates={[]}
+      systemStatus={null}
       onSelectJob={onSelectJob}
       onLoadedCandidates={() => undefined}
       onReviewCandidate={() => undefined}
@@ -196,6 +205,43 @@ it("lets the user switch the JD used by the candidate queue", async () => {
   });
 
   expect(onSelectJob).toHaveBeenCalledWith("job_pmm");
+});
+
+it("explains why the queue stays empty when production search is blocked by storage", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => jsonResponse([]));
+
+  render(
+    <CandidatesPage
+      selectedJobId="job_1"
+      jobs={[job]}
+      candidates={[]}
+      systemStatus={{
+        environment: "vercel",
+        deployment_ready: false,
+        warnings: [],
+        capabilities: {
+          persistent_storage_configured: false,
+          review_provider: "openai",
+          review_configured: false,
+          exa_configured: false,
+          brightdata_configured: false,
+          public_channels: ["github", "openreview", "arxiv"]
+        }
+      }}
+      onSelectJob={() => undefined}
+      onLoadedCandidates={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  expect(
+    await screen.findByText(
+      "Search is disabled in this deployment until durable database storage is configured."
+    )
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Candidate review will stay empty in production until search can write durable data.")
+  ).toBeInTheDocument();
 });
 
 const job: Job = {

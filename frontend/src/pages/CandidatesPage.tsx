@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
-import type { Candidate, Job } from "../types";
+import type { Candidate, Job, SystemStatus } from "../types";
 
 type CandidatesPageProps = {
   selectedJobId: string | null;
   jobs: Job[];
   candidates: Candidate[];
+  systemStatus?: SystemStatus | null;
   onSelectJob: (jobId: string) => void;
   onLoadedCandidates: (candidates: Candidate[]) => void;
   onReviewCandidate: (candidate: Candidate) => void;
@@ -16,12 +17,16 @@ export function CandidatesPage({
   selectedJobId,
   jobs,
   candidates,
+  systemStatus = null,
   onSelectJob,
   onLoadedCandidates,
   onReviewCandidate
 }: CandidatesPageProps) {
   const [status, setStatus] = useState("Loading searched candidates...");
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
+  const searchBlockedByStorage =
+    systemStatus?.environment === "vercel" &&
+    !systemStatus.capabilities.persistent_storage_configured;
 
   const activeCandidate = useMemo(() => {
     return (
@@ -53,7 +58,9 @@ export function CandidatesPage({
         setStatus(
           loadedCandidates.length > 0
             ? "Review candidates from completed search runs."
-            : "No searched candidates for this JD yet."
+            : searchBlockedByStorage
+              ? "Search is disabled in this deployment until durable database storage is configured."
+              : "No searched candidates for this JD yet."
         );
         if (loadedCandidates.length === 0 && jobs.length > 1) {
           await selectLatestCandidateJob(selectedJobId, jobs, onSelectJob, () => ignore);
@@ -90,6 +97,11 @@ export function CandidatesPage({
           </label>
         ) : null}
         <p className="muted">{status}</p>
+        {searchBlockedByStorage ? (
+          <p className="muted">
+            Candidate review will stay empty in production until search can write durable data.
+          </p>
+        ) : null}
         <div className="candidate-list">
           {candidates.map((candidate) => (
             <button

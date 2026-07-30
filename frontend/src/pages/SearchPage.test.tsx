@@ -61,6 +61,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
     <SearchPage
       jobs={[job]}
       selectedJobId="job_1"
+      systemStatus={null}
       onSelectJob={() => undefined}
       onCandidatesFound={onCandidatesFound}
       onReviewCandidate={onReviewCandidate}
@@ -84,7 +85,7 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   fireEvent.click(screen.getByRole("button", { name: "Open Persisted Candidate" }));
   expect(onReviewCandidate).toHaveBeenCalledWith(persistedCandidate);
   expect(fetchMock).toHaveBeenCalledWith(
-    "http://localhost:8000/api/search",
+    "/api/search",
     expect.objectContaining({
       method: "POST",
       body: JSON.stringify({
@@ -102,6 +103,7 @@ it("requires a selected JD before searching", () => {
     <SearchPage
       jobs={[]}
       selectedJobId={null}
+      systemStatus={null}
       onSelectJob={() => undefined}
       onCandidatesFound={() => undefined}
       onReviewCandidate={() => undefined}
@@ -136,6 +138,7 @@ it("shows the active search channels while a search is running", async () => {
     <SearchPage
       jobs={[job]}
       selectedJobId="job_1"
+      systemStatus={null}
       onSelectJob={() => undefined}
       onCandidatesFound={() => undefined}
       onReviewCandidate={() => undefined}
@@ -168,6 +171,7 @@ it("shows search run load and create errors", async () => {
     <SearchPage
       jobs={[job]}
       selectedJobId="job_1"
+      systemStatus={null}
       onSelectJob={() => undefined}
       onCandidatesFound={() => undefined}
       onReviewCandidate={() => undefined}
@@ -191,6 +195,7 @@ it("selects a different JD from the search form", () => {
     <SearchPage
       jobs={[job, { ...job, id: "job_2", title: "Business Intern" }]}
       selectedJobId="job_1"
+      systemStatus={null}
       onSelectJob={onSelectJob}
       onCandidatesFound={() => undefined}
       onReviewCandidate={() => undefined}
@@ -202,6 +207,109 @@ it("selects a different JD from the search form", () => {
   });
 
   expect(onSelectJob).toHaveBeenCalledWith("job_2");
+});
+
+it("disables unavailable deployment channels and blocks search when production storage is incomplete", async () => {
+  render(
+    <SearchPage
+      jobs={[job]}
+      selectedJobId="job_1"
+      systemStatus={{
+        environment: "vercel",
+        deployment_ready: false,
+        warnings: [],
+        capabilities: {
+          persistent_storage_configured: false,
+          review_provider: "openai",
+          review_configured: false,
+          linkedin_configured: false,
+          exa_configured: false,
+          brightdata_configured: false,
+          public_channels: ["github", "openreview", "arxiv"],
+          channel_availability: {
+            linkedin: false,
+            github: true,
+            openreview: true,
+            arxiv: true,
+            exa: false,
+            brightdata_discover: false
+          },
+          missing_env_vars: {
+            storage: ["DATABASE_URL", "TALENT_DATABASE_URL"],
+            review: ["TALENT_OPENAI_API_KEY"],
+            channels: {
+              linkedin: [
+                "TALENT_EXA_API_KEY",
+                "TALENT_BRIGHTDATA_API_KEY",
+                "TALENT_BRIGHTDATA_ZONE"
+              ],
+              exa: ["TALENT_EXA_API_KEY"],
+              brightdata_discover: ["TALENT_BRIGHTDATA_API_KEY", "TALENT_BRIGHTDATA_ZONE"]
+            }
+          }
+        }
+      }}
+      onSelectJob={() => undefined}
+      onCandidatesFound={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  expect(await screen.findByDisplayValue("Search configured from the JD")).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: /LinkedIn/ })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: /Exa/ })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: /Bright Data Discover/ })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: /GitHub/ })).toBeChecked();
+  expect(screen.getByRole("button", { name: "Create search run" })).toBeDisabled();
+  expect(
+    screen.getByText("Search is blocked in production until durable database storage is configured.")
+  ).toBeInTheDocument();
+});
+
+it("keeps LinkedIn available when Exa is configured even without Bright Data", async () => {
+  render(
+    <SearchPage
+      jobs={[job]}
+      selectedJobId="job_1"
+      systemStatus={{
+        environment: "vercel",
+        deployment_ready: true,
+        warnings: ["Optional production channel unavailable: Bright Data Discover."],
+        capabilities: {
+          persistent_storage_configured: true,
+          review_provider: "openai",
+          review_configured: true,
+          linkedin_configured: true,
+          exa_configured: true,
+          brightdata_configured: false,
+          public_channels: ["github", "openreview", "arxiv"],
+          channel_availability: {
+            linkedin: true,
+            github: true,
+            openreview: true,
+            arxiv: true,
+            exa: true,
+            brightdata_discover: false
+          },
+          missing_env_vars: {
+            storage: [],
+            review: [],
+            channels: {
+              brightdata_discover: ["TALENT_BRIGHTDATA_API_KEY", "TALENT_BRIGHTDATA_ZONE"]
+            }
+          }
+        }
+      }}
+      onSelectJob={() => undefined}
+      onCandidatesFound={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  expect(await screen.findByDisplayValue("Search configured from the JD")).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: /LinkedIn/ })).toBeEnabled();
+  expect(screen.getByRole("checkbox", { name: /Exa/ })).toBeEnabled();
+  expect(screen.getByRole("checkbox", { name: /Bright Data Discover/ })).toBeDisabled();
 });
 
 const job: Job = {
