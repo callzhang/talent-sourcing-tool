@@ -118,12 +118,17 @@ export function App() {
             ))}
           </nav>
         </div>
-        <div className="page-intro">
-          <p className="eyebrow">{workspaceLabel}</p>
-          <h1>Talent Sourcing Tool</h1>
-          <p className="hero-copy">
-            JD to multi-channel sourcing to AI review to pass/proceed feedback loop.
-          </p>
+        <div className="workspace-context">
+          <div>
+            <p className="eyebrow">{workspaceLabel}</p>
+            <h1>Talent Sourcing Tool</h1>
+          </div>
+          {systemStatus ? (
+            <DeploymentReadinessPanel
+              systemStatus={systemStatus}
+              providerChecks={providerChecks}
+            />
+          ) : null}
         </div>
         {systemStatus &&
         (systemStatus.warnings.length > 0 ||
@@ -173,12 +178,6 @@ export function App() {
               </div>
             ) : null}
           </section>
-        ) : null}
-        {systemStatus ? (
-          <DeploymentReadinessPanel
-            systemStatus={systemStatus}
-            providerChecks={providerChecks}
-          />
         ) : null}
       </header>
 
@@ -305,92 +304,104 @@ function DeploymentReadinessPanel({
   ];
 
   return (
-    <section className="readiness-panel" aria-label="Deployment readiness">
-      <div className="split-heading">
-        <strong>Deployment readiness</strong>
+    <details className="operations-disclosure">
+      <summary aria-label="Open operational status">
+        <span>Operational status</span>
         <span
           className={`status-pill ${
             systemStatus.deployment_ready ? "status-pill-success" : "status-pill-warning"
           }`}
         >
-          {systemStatus.deployment_ready ? "Ready" : "Blocked"}
+          {systemStatus.deployment_ready ? "Ready" : "Needs attention"}
         </span>
-      </div>
-      <div className="readiness-grid">
-        {readinessItems.map((item) => (
-          <div key={item.label} className="readiness-item">
+      </summary>
+      <section className="readiness-panel" aria-label="Deployment readiness">
+        <div className="split-heading">
+          <strong>Deployment readiness</strong>
+          <span
+            className={`status-pill ${
+              systemStatus.deployment_ready ? "status-pill-success" : "status-pill-warning"
+            }`}
+          >
+            {systemStatus.deployment_ready ? "Ready" : "Blocked"}
+          </span>
+        </div>
+        <div className="readiness-grid">
+          {readinessItems.map((item) => (
+            <div key={item.label} className="readiness-item">
+              <div className="split-heading">
+                <span>{item.label}</span>
+                <span
+                  className={`status-pill ${
+                    item.ready ? "status-pill-success" : "status-pill-warning"
+                  }`}
+                >
+                  {item.ready ? "Ready" : "Missing"}
+                </span>
+              </div>
+              <p className="muted">{item.detail}</p>
+              {"diagnostics" in item && item.diagnostics ? (
+                <p className="muted readiness-diagnostic">{item.diagnostics}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {systemStatus.delivery_resources ? (
+          <section className="handoff-panel" aria-label="Delivery handoff">
             <div className="split-heading">
-              <span>{item.label}</span>
-              <span
-                className={`status-pill ${
-                  item.ready ? "status-pill-success" : "status-pill-warning"
-                }`}
-              >
-                {item.ready ? "Ready" : "Missing"}
-              </span>
+              <strong>Delivery handoff</strong>
+              <span className="status-pill status-pill-neutral">Operator checklist</span>
             </div>
-            <p className="muted">{item.detail}</p>
-            {"diagnostics" in item && item.diagnostics ? (
-              <p className="muted readiness-diagnostic">{item.diagnostics}</p>
-            ) : null}
-          </div>
-        ))}
-      </div>
-      {systemStatus.delivery_resources ? (
-        <section className="handoff-panel" aria-label="Delivery handoff">
-          <div className="split-heading">
-            <strong>Delivery handoff</strong>
-            <span className="status-pill status-pill-neutral">Operator checklist</span>
-          </div>
-          <div className="handoff-grid">
-            <div className="readiness-item">
-              <span>Production site</span>
-              <a href={systemStatus.delivery_resources.production_url} target="_blank" rel="noreferrer">
-                {systemStatus.delivery_resources.production_url}
-              </a>
-              <p className="muted">Share this URL with HR for live validation.</p>
+            <div className="handoff-grid">
+              <div className="readiness-item">
+                <span>Production site</span>
+                <a href={systemStatus.delivery_resources.production_url} target="_blank" rel="noreferrer">
+                  {systemStatus.delivery_resources.production_url}
+                </a>
+                <p className="muted">Share this URL with HR for live validation.</p>
+              </div>
+              <div className="readiness-item">
+                <span>Local app</span>
+                <a href={systemStatus.delivery_resources.local_url} target="_blank" rel="noreferrer">
+                  {systemStatus.delivery_resources.local_url}
+                </a>
+                <p className="muted">Use this during local HR flow rehearsal.</p>
+              </div>
+              <div className="readiness-item">
+                <span>Owner checklist</span>
+                <code>{systemStatus.delivery_resources.owner_checklist_path}</code>
+                <p className="muted">Shortest handoff doc for DB URL and OpenAI key ownership.</p>
+              </div>
+              <div className="readiness-item">
+                <span>Runbook</span>
+                <code>{systemStatus.delivery_resources.runbook_path}</code>
+                <p className="muted">Full production procedure and verification notes.</p>
+              </div>
             </div>
-            <div className="readiness-item">
-              <span>Local app</span>
-              <a href={systemStatus.delivery_resources.local_url} target="_blank" rel="noreferrer">
-                {systemStatus.delivery_resources.local_url}
-              </a>
-              <p className="muted">Use this during local HR flow rehearsal.</p>
+            <div className="handoff-actions">
+              <div>
+                <strong>Verify in order</strong>
+                <ol className="command-list">
+                  {systemStatus.delivery_resources.verification_commands.map((command) => (
+                    <li key={command}>
+                      <code>{command}</code>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <div>
+                <strong>Owner confirmations needed</strong>
+                <ul className="owner-prompt-list">
+                  {systemStatus.delivery_resources.owner_prompts.map((prompt) => (
+                    <li key={prompt}>{prompt}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
-            <div className="readiness-item">
-              <span>Owner checklist</span>
-              <code>{systemStatus.delivery_resources.owner_checklist_path}</code>
-              <p className="muted">Shortest handoff doc for DB URL and OpenAI key ownership.</p>
-            </div>
-            <div className="readiness-item">
-              <span>Runbook</span>
-              <code>{systemStatus.delivery_resources.runbook_path}</code>
-              <p className="muted">Full production procedure and verification notes.</p>
-            </div>
-          </div>
-          <div className="handoff-actions">
-            <div>
-              <strong>Verify in order</strong>
-              <ol className="command-list">
-                {systemStatus.delivery_resources.verification_commands.map((command) => (
-                  <li key={command}>
-                    <code>{command}</code>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <div>
-              <strong>Owner confirmations needed</strong>
-              <ul className="owner-prompt-list">
-                {systemStatus.delivery_resources.owner_prompts.map((prompt) => (
-                  <li key={prompt}>{prompt}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-      ) : null}
-    </section>
+          </section>
+        ) : null}
+      </section>
+    </details>
   );
 }
 

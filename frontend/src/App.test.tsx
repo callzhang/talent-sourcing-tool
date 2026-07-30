@@ -155,7 +155,14 @@ it("shows the production workspace label when the app is running on vercel", asy
   render(<App />);
 
   expect(await screen.findByText("Production sourcing workspace")).toBeInTheDocument();
-  expect(screen.getByRole("region", { name: "Deployment readiness" })).toBeInTheDocument();
+  const operationalStatus = screen.getByRole("group");
+  expect(operationalStatus).not.toHaveAttribute("open");
+  expect(screen.getByRole("region", { name: "Deployment readiness" })).not.toBeVisible();
+
+  fireEvent.click(screen.getByText("Operational status").closest("summary")!);
+
+  expect(operationalStatus).toHaveAttribute("open");
+  expect(screen.getByRole("region", { name: "Deployment readiness" })).toBeVisible();
   expect(screen.getByText("Hard blockers")).toBeInTheDocument();
   expect(screen.getByText("Optional degradations")).toBeInTheDocument();
   expect(
