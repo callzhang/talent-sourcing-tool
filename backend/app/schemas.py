@@ -83,6 +83,7 @@ class SearchRunRead(BaseModel):
     channels: list[str]
     status: str
     params: dict[str, Any]
+    progress: dict[str, Any]
     candidate_count: int
     created_at: datetime
     completed_at: datetime | None

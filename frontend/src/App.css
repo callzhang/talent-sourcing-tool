@@ -765,6 +765,12 @@ h3 {
   display: grid;
 }
 
+.run-progress {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .rubric-list,
 .job-detail,
 .candidate-grid,

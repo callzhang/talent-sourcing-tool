@@ -66,6 +66,12 @@ def create_job(client: TestClient) -> str:
     return str(response.json()["job"]["id"])
 
 
+def run_created_search(client: TestClient, create_response) -> object:  # noqa: ANN001
+    assert create_response.status_code == 200
+    search_run_id = create_response.json()["id"]
+    return client.post(f"/api/search/{search_run_id}/run")
+
+
 def test_search_upserts_candidates_by_profile_url(client: TestClient, engine: Engine):
     job_id = create_job(client)
 
@@ -78,6 +84,7 @@ def test_search_upserts_candidates_by_profile_url(client: TestClient, engine: En
         },
     )
 
+    response = run_created_search(client, response)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "completed"
@@ -93,10 +100,46 @@ def test_search_upserts_candidates_by_profile_url(client: TestClient, engine: En
         },
     )
 
+    repeat_response = run_created_search(client, repeat_response)
     assert repeat_response.status_code == 200
     with Session(engine) as session:
         candidates = session.exec(select(Candidate)).all()
     assert len(candidates) == 1
+
+
+def test_search_persists_pending_run_before_worker_executes(client: TestClient, engine: Engine):
+    job_id = create_job(client)
+
+    create_response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "founding PMM AI startup",
+            "channels": ["linkedin", "exa"],
+            "params": {"limit": 2},
+        },
+    )
+
+    assert create_response.status_code == 200
+    created_run = create_response.json()
+    assert created_run["status"] == "pending"
+    assert created_run["candidate_count"] == 0
+    assert created_run["progress"] == {
+        "worker": 1,
+        "stage": "queued",
+        "total_channels": 2,
+        "completed_channels": 0,
+        "active_channel": None,
+    }
+    with Session(engine) as session:
+        assert session.exec(select(SearchResult)).all() == []
+
+    run_response = client.post(f"/api/search/{created_run['id']}/run")
+    assert run_response.status_code == 200
+    completed_run = run_response.json()
+    assert completed_run["status"] == "completed"
+    assert completed_run["progress"]["worker"] == 1
+    assert completed_run["progress"]["completed_channels"] == 2
 
 
 def test_search_persists_connector_candidate_payload(client: TestClient):
@@ -111,6 +154,7 @@ def test_search_persists_connector_candidate_payload(client: TestClient):
         },
     )
 
+    response = run_created_search(client, response)
     assert response.status_code == 200
     data = response.json()
     assert len(data["candidates"]) == 1
@@ -136,6 +180,8 @@ def test_list_search_runs_returns_latest_runs_with_candidate_counts(client: Test
         "/api/search",
         json={"job_id": job_id, "query": "AI product marketer", "params": {"limit": 2}},
     )
+    first_response = run_created_search(client, first_response)
+    second_response = run_created_search(client, second_response)
     assert first_response.status_code == 200
     assert second_response.status_code == 200
 
@@ -157,6 +203,8 @@ def test_get_search_run_returns_candidates(client: TestClient):
     )
     assert create_response.status_code == 200
     search_run_id = create_response.json()["id"]
+    run_response = client.post(f"/api/search/{search_run_id}/run")
+    assert run_response.status_code == 200
 
     response = client.get(f"/api/search/{search_run_id}")
 
@@ -263,8 +311,10 @@ def test_search_requires_real_config_for_linkedin_channel(
         },
     )
 
-    assert response.status_code == 502
-    assert "linkedin channel requires" in response.json()["detail"].casefold()
+    response = run_created_search(client, response)
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert "linkedin channel requires" in response.json()["progress"]["error_message"].casefold()
 
 
 def test_search_marks_run_failed_when_connector_raises(
@@ -289,12 +339,14 @@ def test_search_marks_run_failed_when_connector_raises(
         },
     )
 
-    assert response.status_code == 502
-    assert response.json()["detail"] == "connector unavailable"
+    response = run_created_search(client, response)
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["progress"]["error_message"] == "connector unavailable"
     with Session(engine) as session:
         search_run = session.exec(select(SearchRun)).one()
     assert search_run.status == "failed"
-    assert search_run.run_metadata["error_message"] == "connector unavailable"
+    assert search_run.run_metadata["progress"]["error_message"] == "connector unavailable"
 
 
 def test_search_is_blocked_on_vercel_without_durable_storage(
@@ -360,6 +412,7 @@ def test_search_deduplicates_connector_results_by_canonical_profile_url(
         json={"job_id": job_id, "query": "founding PMM", "params": {"limit": 2}},
     )
 
+    response = run_created_search(client, response)
     assert response.status_code == 200
     data = response.json()
     assert len(data["candidates"]) == 1
@@ -410,6 +463,7 @@ def test_search_stores_json_unsafe_raw_payload_safely(
         json={"job_id": job_id, "query": "json unsafe"},
     )
 
+    response = run_created_search(client, response)
     assert response.status_code == 200
     with Session(engine) as session:
         search_result = session.exec(select(SearchResult)).one()
@@ -452,12 +506,14 @@ def test_search_marks_run_failed_when_persistence_fails(
         json={"job_id": job_id, "query": "founding PMM"},
     )
 
-    assert response.status_code == 502
-    assert response.json()["detail"] == "candidate persistence failed"
+    response = run_created_search(client, response)
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["progress"]["error_message"] == "candidate persistence failed"
     with Session(engine) as session:
         search_run = session.exec(select(SearchRun)).one()
     assert search_run.status == "failed"
-    assert search_run.run_metadata["error_message"] == "candidate persistence failed"
+    assert search_run.run_metadata["progress"]["error_message"] == "candidate persistence failed"
 
 
 def test_json_safe_value_converts_unknown_objects_to_string():
@@ -715,6 +771,7 @@ def test_search_result_payload_uses_profile_url_not_linkedin_url(
         json={"job_id": job_id, "query": "example user", "channels": ["github"]},
     )
 
+    response = run_created_search(client, response)
     assert response.status_code == 200
     candidate = response.json()["candidates"][0]
     assert candidate["profile_url"] == "https://github.com/example-user"

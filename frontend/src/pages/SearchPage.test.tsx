@@ -47,10 +47,50 @@ it("loads persisted runs and reports candidates from a new search", async () => 
         candidates: [persistedCandidate]
       });
     }
+    if (url.endsWith("/api/search/search_run_new") && method === "GET") {
+      return jsonResponse({
+        id: "search_run_new",
+        job_id: "job_1",
+        query: "Search configured from the JD",
+        provider: "bright_data",
+        channels: ["linkedin", "github", "exa", "brightdata_discover"],
+        status: "pending",
+        params: { limit: 2, region: "San Francisco, CA" },
+        progress: { worker: 1, stage: "searching", total_channels: 4, completed_channels: 1 },
+        candidate_count: 0,
+        created_at: "2026-07-31T00:00:00Z",
+        completed_at: null,
+        candidates: []
+      });
+    }
     if (url.endsWith("/api/search") && method === "POST") {
       return jsonResponse({
         id: "search_run_new",
+        job_id: "job_1",
+        query: "Search configured from the JD",
+        provider: "bright_data",
+        channels: ["linkedin", "github", "exa", "brightdata_discover"],
+        status: "pending",
+        params: { limit: 2, region: "San Francisco, CA" },
+        progress: { worker: 1, stage: "queued", total_channels: 4, completed_channels: 0 },
+        candidate_count: 0,
+        created_at: "2026-07-31T00:00:00Z",
+        completed_at: null
+      });
+    }
+    if (url.endsWith("/api/search/search_run_new/run") && method === "POST") {
+      return jsonResponse({
+        id: "search_run_new",
+        job_id: "job_1",
+        query: "Search configured from the JD",
+        provider: "bright_data",
+        channels: ["linkedin", "github", "exa", "brightdata_discover"],
         status: "completed",
+        params: { limit: 2, region: "San Francisco, CA" },
+        progress: { worker: 1, stage: "completed", total_channels: 4, completed_channels: 4 },
+        candidate_count: 1,
+        created_at: "2026-07-31T00:00:00Z",
+        completed_at: "2026-07-31T00:01:00Z",
         candidates: [candidate]
       });
     }
@@ -118,8 +158,8 @@ it("requires a selected JD before searching", () => {
   expect(screen.getByText("Create or select a JD before searching.")).toBeInTheDocument();
 });
 
-it("shows the active search channels while a search is running", async () => {
-  let resolveSearch: (value: Response) => void = () => undefined;
+it("persists a queued run immediately and reports its worker progress", async () => {
+  let resolveRun: (value: Response) => void = () => undefined;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -127,8 +167,23 @@ it("shows the active search channels while a search is running", async () => {
       return jsonResponse([]);
     }
     if (url.endsWith("/api/search") && method === "POST") {
+      return jsonResponse({
+        id: "search_run_new",
+        job_id: "job_1",
+        query: "Search configured from the JD",
+        provider: "bright_data",
+        channels: ["linkedin", "github", "exa", "brightdata_discover"],
+        status: "pending",
+        params: { limit: 10, region: "San Francisco, CA" },
+        progress: { worker: 1, stage: "queued", total_channels: 4, completed_channels: 0 },
+        candidate_count: 0,
+        created_at: "2026-07-31T00:00:00Z",
+        completed_at: null
+      });
+    }
+    if (url.endsWith("/api/search/search_run_new/run") && method === "POST") {
       return new Promise<Response>((resolve) => {
-        resolveSearch = resolve;
+        resolveRun = resolve;
       });
     }
     return jsonResponse([]);
@@ -152,10 +207,23 @@ it("shows the active search channels while a search is running", async () => {
     )
   ).toBeInTheDocument();
 
-  resolveSearch(
+  expect(await screen.findByText("1 persisted runs")).toBeInTheDocument();
+  expect(screen.getByText("pending · 0 candidates")).toBeInTheDocument();
+  expect(screen.getByLabelText("Worker 1; 0 of 4 channels complete")).toBeInTheDocument();
+
+  resolveRun(
     await jsonResponse({
       id: "search_run_new",
+      job_id: "job_1",
+      query: "Search configured from the JD",
+      provider: "bright_data",
+      channels: ["linkedin", "github", "exa", "brightdata_discover"],
       status: "completed",
+      params: { limit: 10, region: "San Francisco, CA" },
+      progress: { worker: 1, stage: "completed", total_channels: 4, completed_channels: 4 },
+      candidate_count: 1,
+      created_at: "2026-07-31T00:00:00Z",
+      completed_at: "2026-07-31T00:01:00Z",
       candidates: [candidate]
     })
   );

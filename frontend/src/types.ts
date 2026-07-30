@@ -131,12 +131,6 @@ export type Candidate = {
   last_search_rank?: number | null;
 };
 
-export type SearchRunResult = {
-  id: string;
-  status: "completed" | "failed" | "running" | string;
-  candidates: Candidate[];
-};
-
 export type SearchRun = {
   id: string;
   job_id: string;
@@ -145,6 +139,7 @@ export type SearchRun = {
   channels: SearchChannel[];
   status: string;
   params: Record<string, unknown>;
+  progress: Record<string, unknown>;
   candidate_count: number;
   created_at: ISODateString;
   completed_at: ISODateString | null;

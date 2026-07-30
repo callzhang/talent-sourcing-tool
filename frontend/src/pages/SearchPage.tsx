@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api";
 import type {
@@ -43,6 +43,7 @@ export function SearchPage({
   const [runDetails, setRunDetails] = useState<Record<string, SearchRunDetail>>({});
   const [status, setStatus] = useState("Choose a JD and create a search run.");
   const [isSearching, setIsSearching] = useState(false);
+  const startedRunIds = useRef(new Set<string>());
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null;
   const availableChannels = useMemo(
     () => searchChannelsForStatus(systemStatus),
@@ -99,6 +100,64 @@ export function SearchPage({
     };
   }, [selectedJobId]);
 
+  useEffect(() => {
+    const activeRunIds = runs
+      .filter((run) => run.status === "pending" || run.status === "running")
+      .map((run) => run.id);
+    if (activeRunIds.length === 0) {
+      return;
+    }
+
+    let ignore = false;
+    const refresh = () => {
+      activeRunIds.forEach((runId) => {
+        api
+          .getSearchRun(runId)
+          .then((detail) => {
+            if (!ignore) {
+              applyRunDetail(detail);
+            }
+          })
+          .catch(() => undefined);
+      });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 1_000);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+    };
+  }, [runs]);
+
+  function applyRunDetail(detail: SearchRunDetail) {
+    setRunDetails((current) => ({ ...current, [detail.id]: detail }));
+    setRuns((current) =>
+      current.map((run) => (run.id === detail.id ? searchRunFromDetail(detail) : run))
+    );
+    if (detail.status === "completed") {
+      onCandidatesFound(detail.candidates);
+      setStatus(`Search completed with ${detail.candidates.length} candidates.`);
+      setIsSearching(false);
+    } else if (detail.status === "failed") {
+      setStatus(searchRunError(detail) || "Search failed. Review the run history for details.");
+      setIsSearching(false);
+    }
+  }
+
+  function startRun(searchRunId: string) {
+    if (startedRunIds.current.has(searchRunId)) {
+      return;
+    }
+    startedRunIds.current.add(searchRunId);
+    void api
+      .runSearchRun(searchRunId)
+      .then(applyRunDetail)
+      .catch((error: unknown) => {
+        setStatus(error instanceof Error ? error.message : "Unable to run search.");
+        setIsSearching(false);
+      });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedJobId) {
@@ -127,49 +186,11 @@ export function SearchPage({
           region: selectedJob?.region.trim() ?? ""
         }
       });
-      onCandidatesFound(result.candidates);
-      setRuns((current) => [
-        {
-          id: result.id,
-          job_id: selectedJobId,
-          query,
-          provider: "bright_data",
-          channels,
-          status: result.status,
-          params: {
-            limit: Number(limit) || 10,
-            region: selectedJob?.region.trim() ?? ""
-          },
-          candidate_count: result.candidates.length,
-          created_at: new Date().toISOString(),
-          completed_at: new Date().toISOString()
-        },
-        ...current
-      ]);
-      setRunDetails((current) => ({
-        ...current,
-        [result.id]: {
-          id: result.id,
-          job_id: selectedJobId,
-          query,
-          provider: "bright_data",
-          channels,
-          status: result.status,
-          params: {
-            limit: Number(limit) || 10,
-            region: selectedJob?.region.trim() ?? ""
-          },
-          candidate_count: result.candidates.length,
-          created_at: new Date().toISOString(),
-          completed_at: new Date().toISOString(),
-          candidates: result.candidates
-        }
-      }));
-      setStatus(`Search completed with ${result.candidates.length} candidates.`);
+      setRuns((current) => [result, ...current.filter((run) => run.id !== result.id)]);
+      setStatus(`Search run queued on ${formatChannels(result.channels)}.`);
+      startRun(result.id);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unable to create search run.");
-    } finally {
-      setIsSearching(false);
     }
   }
 
@@ -255,6 +276,7 @@ export function SearchPage({
               </span>
               <span>{formatRunRegion(run.params)}</span>
               <span>{run.channels.map(channelLabel).join(" + ")}</span>
+              <RunProgress progress={run.progress} />
               <RunCandidates
                 candidates={runDetails[run.id]?.candidates ?? []}
                 onReviewCandidate={onReviewCandidate}
@@ -264,6 +286,30 @@ export function SearchPage({
         </div>
       </div>
     </section>
+  );
+}
+
+function searchRunFromDetail(detail: SearchRunDetail): SearchRun {
+  const { candidates: _candidates, ...run } = detail;
+  return run;
+}
+
+function searchRunError(detail: SearchRunDetail): string | null {
+  const errorMessage = detail.progress.error_message;
+  return typeof errorMessage === "string" && errorMessage.length > 0 ? errorMessage : null;
+}
+
+function RunProgress({ progress = {} }: { progress?: Record<string, unknown> }) {
+  const worker = typeof progress.worker === "number" ? progress.worker : 1;
+  const completed = typeof progress.completed_channels === "number" ? progress.completed_channels : 0;
+  const total = typeof progress.total_channels === "number" ? progress.total_channels : 0;
+  const active = typeof progress.active_channel === "string" ? progress.active_channel : null;
+
+  return (
+    <span className="run-progress" aria-label={`Worker ${worker}; ${completed} of ${total} channels complete`}>
+      Worker {worker} · {completed}/{total} channels
+      {active ? ` · ${channelLabel(active)}` : ""}
+    </span>
   );
 }
 
@@ -329,7 +375,7 @@ function formatChannels(channels: string[]): string {
   return labels.join(" + ");
 }
 
-function formatRunRegion(params: Record<string, unknown>): string {
+function formatRunRegion(params: Record<string, unknown> = {}): string {
   const region = typeof params.region === "string" ? params.region.trim() : "";
   return region || "No region specified";
 }

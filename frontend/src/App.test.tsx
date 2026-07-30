@@ -301,7 +301,35 @@ it("creates a job, displays its rubric, and uses it for search and candidates", 
       return jsonResponse([]);
     }
     if (url.endsWith("/api/search") && method === "POST") {
-      return jsonResponse(searchRunResult);
+      return jsonResponse({
+        id: "search_run_1",
+        job_id: "job_1",
+        query: "AI product marketer",
+        provider: "bright_data",
+        channels: ["linkedin"],
+        status: "pending",
+        params: { limit: 10, region: "San Francisco, CA" },
+        progress: { worker: 1, stage: "queued", total_channels: 1, completed_channels: 0 },
+        candidate_count: 0,
+        created_at: "2026-07-31T00:00:00Z",
+        completed_at: null
+      });
+    }
+    if (url.endsWith("/api/search/search_run_1/run") && method === "POST") {
+      return jsonResponse({
+        id: "search_run_1",
+        job_id: "job_1",
+        query: "AI product marketer",
+        provider: "bright_data",
+        channels: ["linkedin"],
+        status: "completed",
+        params: { limit: 10, region: "San Francisco, CA" },
+        progress: { worker: 1, stage: "completed", total_channels: 1, completed_channels: 1 },
+        candidate_count: 1,
+        created_at: "2026-07-31T00:00:00Z",
+        completed_at: "2026-07-31T00:01:00Z",
+        candidates: searchRunResult.candidates
+      });
     }
     if (url.endsWith("/api/candidates?job_id=job_1")) {
       return jsonResponse(searchRunResult.candidates);

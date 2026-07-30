@@ -11,7 +11,6 @@ import type {
   SearchChannel,
   SearchRun,
   SearchRunDetail,
-  SearchRunResult,
   ProviderChecks,
   SystemStatus
 } from "./types";
@@ -133,7 +132,7 @@ export const api = {
     return request<JobWithRubric>(`/api/jobs/${encodeURIComponent(jobId)}`);
   },
   createSearch(payload: CreateSearchPayload) {
-    return request<SearchRunResult>("/api/search", { method: "POST", body: payload });
+    return request<SearchRun>("/api/search", { method: "POST", body: payload });
   },
   listSearchRuns(jobId?: string) {
     const query = jobId ? `?job_id=${encodeURIComponent(jobId)}` : "";
@@ -141,6 +140,11 @@ export const api = {
   },
   getSearchRun(searchRunId: string) {
     return request<SearchRunDetail>(`/api/search/${encodeURIComponent(searchRunId)}`);
+  },
+  runSearchRun(searchRunId: string) {
+    return request<SearchRunDetail>(`/api/search/${encodeURIComponent(searchRunId)}/run`, {
+      method: "POST"
+    });
   },
   listCandidates(jobId?: string) {
     const query = jobId ? `?job_id=${encodeURIComponent(jobId)}` : "";
