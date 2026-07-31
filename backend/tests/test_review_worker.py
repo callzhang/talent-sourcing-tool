@@ -6,7 +6,20 @@ import httpx
 import pytest
 
 from app.core.config import Settings
-from app.services.review_worker import OpenAIReviewWorker, ReviewWorker, build_review_runner
+from app.services.review_worker import (
+    OpenAIReviewWorker,
+    ReviewWorker,
+    build_review_runner,
+    build_review_schema,
+)
+
+
+def test_review_schema_requires_auditable_evidence():
+    evidence_schema = build_review_schema()["properties"]["evidence"]
+
+    assert "evidence" in build_review_schema()["required"]
+    assert evidence_schema["minItems"] == 1
+    assert evidence_schema["items"]["required"] == ["claim", "detail", "source_url"]
 
 
 def test_review_worker_writes_input_and_reads_review_json(tmp_path: Path):
@@ -24,6 +37,11 @@ payload = json.loads((workspace / "input.json").read_text())
     "overall_score": 8.5,
     "recommendation": "proceed",
     "decision_summary": "Strong match for the role.",
+        "evidence": [{
+            "claim": "候选人具备岗位所需的产品构建经验。",
+            "detail": "候选人公开资料描述其交付过 AI 产品原型。",
+            "source_url": "https://example.com/profile",
+        }],
     "review_job_id": payload["review_job_id"],
 }))
 """.strip()
@@ -78,6 +96,11 @@ Path({str(invocation_path)!r}).write_text(json.dumps({{
     "overall_score": 8.5,
     "recommendation": "proceed",
     "decision_summary": "Strong match for the role.",
+    "evidence": [{{
+        "claim": "候选人具备岗位所需的产品构建经验。",
+        "detail": "候选人公开资料描述其交付过 AI 产品原型。",
+        "source_url": "https://example.com/profile",
+    }}],
 }}))
 """.strip()
     )
@@ -131,6 +154,13 @@ def test_review_worker_rejects_invalid_review_output(
         "overall_score": 8.5,
         "recommendation": "proceed",
         "decision_summary": "Strong match for the role.",
+        "evidence": [
+            {
+                "claim": "候选人具备岗位所需的产品构建经验。",
+                "detail": "候选人公开资料描述其交付过 AI 产品原型。",
+                "source_url": "https://example.com/profile",
+            }
+        ],
     }
     review[field] = value
     fake_codex.write_text(
@@ -201,7 +231,13 @@ def test_openai_review_worker_reads_json_response():
                                         "overall_score": 72,
                                         "recommendation": "proceed",
                                         "decision_summary": "Good enough.",
-                                        "evidence": ["Public launch"],
+                                        "evidence": [
+                                            {
+                                                "claim": "候选人有公开产品发布经历。",
+                                                "detail": "公开资料提及其主导过产品发布。",
+                                                "source_url": "https://example.com/launch",
+                                            }
+                                        ],
                                     }
                                 )
                             }
@@ -226,6 +262,52 @@ def test_openai_review_worker_reads_json_response():
     assert result.output_path is None
     assert result.review["overall_score"] == 72
     assert result.review["recommendation"] == "proceed"
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        [{"claim": "候选人有产品经验。", "detail": "", "source_url": None}],
+        [{"label": "产品经验", "source_url": "https://example.com/profile"}],
+        [],
+    ],
+)
+def test_openai_review_worker_rejects_ungrounded_evidence(evidence: list[object]):
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "candidate_id": "candidate_123",
+                                        "job_id": "job_123",
+                                        "overall_score": 72,
+                                        "recommendation": "proceed",
+                                        "decision_summary": "候选人符合基本要求。",
+                                        "evidence": evidence,
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+        )
+    )
+    worker = OpenAIReviewWorker(
+        api_key="test-key",
+        model="gpt-4.1-mini",
+        base_url="https://api.openai.com/v1",
+        timeout_seconds=30,
+        client=client,
+    )
+
+    with pytest.raises(RuntimeError, match="Invalid review output"):
+        worker.run_review("review_job_123", {"candidate_id": "candidate_123", "job_id": "job_123"})
 
 
 def test_build_review_runner_uses_openai_on_vercel(monkeypatch: pytest.MonkeyPatch):

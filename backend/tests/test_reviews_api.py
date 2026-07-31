@@ -91,7 +91,13 @@ def test_start_review_returns_pending_then_run_review_job_completes_review(
                     "overall_score": 8.5,
                     "recommendation": "proceed",
                     "decision_summary": "Strong builder evidence.",
-                    "evidence": [{"label": "prototype", "detail": "Built AI apps"}],
+                    "evidence": [
+                        {
+                            "claim": "候选人具备 AI 产品构建经验。",
+                            "detail": "公开资料显示其交付过 AI 应用。",
+                            "source_url": "https://www.linkedin.com/in/example",
+                        }
+                    ],
                 },
             )
 
@@ -128,6 +134,15 @@ def test_start_review_returns_pending_then_run_review_job_completes_review(
     assert review.review_job_id == review_job.id
     assert review.summary == "Strong builder evidence."
     assert review.score == 8.5
+    assert review.evidence == [
+        {
+            "claim": "候选人具备 AI 产品构建经验。",
+            "detail": "公开资料显示其交付过 AI 应用。",
+            "source_url": "https://www.linkedin.com/in/example",
+            "label": "候选人具备 AI 产品构建经验。",
+        }
+    ]
+    assert review.raw_review["evidence"] == review.evidence
 
 
 def test_get_review_job_returns_status_and_attached_review(client: TestClient, engine: Engine):
@@ -222,7 +237,7 @@ def test_get_review_job_404s_when_missing(client: TestClient):
     assert response.json()["detail"] == "Review job not found"
 
 
-def test_start_review_normalizes_string_evidence_from_worker(
+def test_start_review_rejects_ungrounded_evidence_from_worker(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     job_id, candidate_id = seed_review_inputs(engine)
@@ -247,7 +262,7 @@ def test_start_review_normalizes_string_evidence_from_worker(
                     "overall_score": 4.9,
                     "recommendation": "pass",
                     "decision_summary": "Limited match for the role.",
-                    "evidence": ["Public paper only", "No management record"],
+                    "evidence": [{"label": "公开论文", "source_url": "https://example.com/paper"}],
                 },
             )
 
@@ -260,19 +275,13 @@ def test_start_review_normalizes_string_evidence_from_worker(
 
     assert response.status_code == 200
     data = client.post(f"/api/reviews/jobs/{response.json()['review_job_id']}/run").json()
-    assert data["review"]["evidence"] == [
-        {"label": "Evidence 1", "detail": "Public paper only"},
-        {"label": "Evidence 2", "detail": "No management record"},
-    ]
+    assert data["status"] == "failed"
+    assert "evidence" in data["error_message"]
 
     with Session(engine) as session:
-        review = session.exec(select(Review)).one()
+        reviews = session.exec(select(Review)).all()
 
-    assert review.evidence == [
-        {"label": "Evidence 1", "detail": "Public paper only"},
-        {"label": "Evidence 2", "detail": "No management record"},
-    ]
-    assert review.raw_review["evidence"] == review.evidence
+    assert reviews == []
 
 
 def test_start_review_marks_job_failed_when_worker_output_breaks_persistence(
@@ -298,6 +307,13 @@ def test_start_review_marks_job_failed_when_worker_output_breaks_persistence(
                     "overall_score": "not-a-number",
                     "recommendation": "proceed",
                     "decision_summary": "Invalid score should fail persistence.",
+                    "evidence": [
+                        {
+                            "claim": "候选人具备岗位相关经验。",
+                            "detail": "候选人公开资料描述其相关产品工作。",
+                            "source_url": "https://www.linkedin.com/in/example",
+                        }
+                    ],
                 },
             )
 
@@ -355,6 +371,13 @@ def test_start_review_rejects_worker_output_for_wrong_job_or_candidate(
                 "overall_score": 8.5,
                 "recommendation": "proceed",
                 "decision_summary": "This output is for the wrong entity.",
+                "evidence": [
+                    {
+                        "claim": "候选人有公开产品经历。",
+                        "detail": "公开资料提及其产品交付经验。",
+                        "source_url": "https://www.linkedin.com/in/example",
+                    }
+                ],
             }
             review[review_job_id_key] = wrong_value
             return ReviewWorkerResult(
@@ -567,6 +590,13 @@ def test_start_review_does_not_run_worker_until_review_job_is_polled(
                     "overall_score": 7.0,
                     "recommendation": "proceed",
                     "decision_summary": "Deferred run completed.",
+                    "evidence": [
+                        {
+                            "claim": "候选人具备岗位相关经验。",
+                            "detail": "候选人公开资料描述其相关产品工作。",
+                            "source_url": "https://www.linkedin.com/in/example",
+                        }
+                    ],
                 },
             )
 
@@ -794,8 +824,15 @@ def test_get_latest_review_normalizes_legacy_string_evidence(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["evidence"] == [{"label": "Evidence 1", "detail": "Published paper only"}]
-    assert data["review"]["evidence"] == [{"label": "Evidence 1", "detail": "Published paper only"}]
+    assert data["evidence"] == [
+        {
+            "label": "证据 1",
+            "claim": "Published paper only",
+            "detail": "Published paper only",
+            "source_url": None,
+        }
+    ]
+    assert data["review"]["evidence"] == data["evidence"]
 
 
 def test_read_review_404s_when_review_job_is_missing(engine: Engine):

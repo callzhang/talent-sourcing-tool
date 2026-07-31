@@ -24,7 +24,7 @@ from app.db.models import (
 from app.db.session import get_session
 from app.schemas import DecisionCreate, ReviewJobRead, ReviewRead, ReviewStart, ReviewStartResult
 from app.services.pass_reason import draft_pass_reason, suggest_refinements
-from app.services.review_worker import ReviewRunner, build_review_runner
+from app.services.review_worker import ReviewRunner, build_review_runner, validate_review_output
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
@@ -244,7 +244,11 @@ def process_review_job(
         return session.get(ReviewJob, review_job.id)  # type: ignore[return-value]
 
     try:
-        review_data = normalize_review_data(worker_result.review)
+        # Runners are pluggable, so validate here as well as inside the concrete workers.
+        # Only legacy records may use display normalization without satisfying the new contract.
+        review_data = normalize_review_data(
+            validate_review_output(worker_result.review).model_dump(mode="json")
+        )
         validate_review_identity(
             review_data=review_data,
             review_job=review_job,
@@ -283,10 +287,44 @@ def normalize_review_evidence(evidence: Any) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for index, item in enumerate(evidence, start=1):
         if isinstance(item, dict):
-            normalized.append(item)
+            normalized_item = dict(item)
+            claim = _review_evidence_text(normalized_item.get("claim"))
+            label = _review_evidence_text(normalized_item.get("label")) or claim
+            detail = _review_evidence_detail(normalized_item)
+            normalized_item["label"] = label or f"证据 {index}"
+            normalized_item["claim"] = claim or normalized_item["label"]
+            normalized_item["detail"] = detail or "历史评审未保留证据详情，不能作为决策依据。"
+            source_url = _review_evidence_text(
+                normalized_item.get("source_url") or normalized_item.get("url")
+            )
+            if source_url:
+                normalized_item["source_url"] = source_url
+            normalized.append(normalized_item)
             continue
-        normalized.append({"label": f"Evidence {index}", "detail": str(item)})
+        detail = str(item).strip()
+        normalized.append(
+            {
+                "label": f"证据 {index}",
+                "claim": detail or f"证据 {index}",
+                "detail": detail or "历史评审未保留证据详情，不能作为决策依据。",
+                "source_url": None,
+            }
+        )
     return normalized
+
+
+def _review_evidence_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return value.strip() or None
+
+
+def _review_evidence_detail(item: dict[str, Any]) -> str | None:
+    for field in ("detail", "quote", "summary", "rationale", "evidence", "reason", "content"):
+        detail = _review_evidence_text(item.get(field))
+        if detail:
+            return detail
+    return None
 
 
 def normalize_review_data(review_data: dict[str, Any]) -> dict[str, Any]:

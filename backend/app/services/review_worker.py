@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 
 from app.core.config import Settings, settings
 
@@ -21,6 +21,7 @@ REQUIRED_REVIEW_FIELDS = {
     "overall_score",
     "recommendation",
     "decision_summary",
+    "evidence",
 }
 
 
@@ -28,6 +29,9 @@ REVIEW_PROMPT = """你正在此工作区执行候选人评审。
 从 input.json 读取评审任务、候选人、岗位和评分标准。
 严格遵循 review.schema.json 的输出合同。
 使用 profile_data.raw.signals、profile_data.raw.risks 和公开资料字段作为证据。
+evidence 至少包含一条证据对象。每条对象必须有 claim、detail 和 source_url：
+claim 是一句简洁的简体中文判断，detail 是支撑该判断的具体事实或原文摘录，
+source_url 是 input.json 中可用的公开来源链接；没有公开链接时使用 null，且不得编造链接。
 strong_proceed 评为 85-100 分，proceed 为 70-84 分，borderline 为 55-69 分，低于 55 分为 pass。
 对只做 GTM、只做平台、咨询经历过重或缺少亲自完成 AI 原型证据的候选人降分。
 每个分数低于 70 的 dimension_scores 项必须使用以下之一填写 reason_code：
@@ -43,7 +47,23 @@ OPENAI_REVIEW_PROMPT = """你是负责高质量人才搜索流程的资深招聘
 只输出一个严格符合 review.schema.json 的 JSON 对象。
 只能使用 input.json 中已有的证据，不得虚构个人经历。
 若证据不足或存在歧义，保守评分并说明不确定性。
+evidence 至少包含一条对象。每条对象必须提供一句简洁的简体中文 claim、可核验的 detail
+（具体事实或原文摘录），并在 input.json 提供公开来源时填写 source_url；没有公开链接时使用 null，
+不得编造链接。没有 detail 的标签不能作为 evidence。
 所有给 HR 阅读的文本字段必须使用简体中文；JSON 字段名、recommendation 和 reason_code 保持 schema 规定的英文值。"""
+
+
+class ReviewEvidence(BaseModel):
+    claim: str = Field(min_length=1, max_length=280)
+    detail: str = Field(min_length=1, max_length=2000)
+    source_url: AnyHttpUrl | None = None
+
+    @field_validator("claim", "detail", mode="before")
+    @classmethod
+    def reject_blank_text(cls, value: Any) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value.strip()
 
 
 class ReviewOutput(BaseModel):
@@ -55,7 +75,7 @@ class ReviewOutput(BaseModel):
     dimension_scores: list[Any] = Field(default_factory=list)
     strengths: list[Any] = Field(default_factory=list)
     risks: list[Any] = Field(default_factory=list)
-    evidence: list[Any] = Field(default_factory=list)
+    evidence: list[ReviewEvidence] = Field(min_length=1)
     sources: list[Any] = Field(default_factory=list)
     suggested_interview_questions: list[Any] = Field(default_factory=list)
     uncertainties: list[Any] = Field(default_factory=list)
@@ -239,7 +259,31 @@ def build_review_schema() -> dict[str, Any]:
             "dimension_scores": {"type": "array"},
             "strengths": {"type": "array"},
             "risks": {"type": "array"},
-            "evidence": {"type": "array"},
+            "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "required": ["claim", "detail", "source_url"],
+                    "properties": {
+                        "claim": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "一句简洁的简体中文判断。",
+                        },
+                        "detail": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "支撑判断的具体事实或公开资料原文摘录。",
+                        },
+                        "source_url": {
+                            "type": ["string", "null"],
+                            "format": "uri",
+                            "description": "可用时填写 input.json 中的公开来源链接；没有时为 null。",
+                        },
+                    },
+                },
+            },
             "sources": {"type": "array"},
             "suggested_interview_questions": {"type": "array"},
             "uncertainties": {"type": "array"},
