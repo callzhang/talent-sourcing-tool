@@ -95,6 +95,39 @@ it("renders candidate listings in the left pane and selected candidate details i
   expect(queuePane.compareDocumentPosition(detailPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
+it("shows the persisted candidate decision in the review queue", async () => {
+  const decidedCandidate = {
+    ...candidate,
+    latest_decision: {
+      id: "decision_1",
+      job_id: "job_1",
+      candidate_id: "candidate_1",
+      review_id: null,
+      decision: "pass" as const,
+      notes: "缺少公开交付证据。",
+      decided_by: "hr"
+    }
+  };
+  vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+    jsonResponse([decidedCandidate])
+  );
+
+  render(
+    <CandidatesPage
+      selectedJobId="job_1"
+      jobs={[job]}
+      candidates={[decidedCandidate]}
+      systemStatus={null}
+      onSelectJob={() => undefined}
+      onLoadedCandidates={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  const queuePane = await screen.findByRole("region", { name: "候选人列表" });
+  expect(within(queuePane).getByText("已淘汰")).toBeInTheDocument();
+});
+
 it("defaults to the job for the latest candidate when the selected JD has no candidates", async () => {
   const onSelectJob = vi.fn();
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

@@ -549,6 +549,18 @@ h3 {
   font-size: 0.875rem;
 }
 
+.candidate-list-row .decision-status {
+  font-weight: 700;
+}
+
+.candidate-list-row .decision-status-pass {
+  color: var(--color-error);
+}
+
+.candidate-list-row .decision-status-proceed {
+  color: var(--color-success);
+}
+
 .run-candidate-row {
   justify-items: start;
   text-align: left;

@@ -38,7 +38,9 @@ export function CandidateDetailPage({
   const [reviewJobStatus, setReviewJobStatus] = useState<ReviewStageKey>("idle");
   const [review, setReview] = useState<ReviewPayload | null>(null);
   const [draft, setDraft] = useState<DraftPassReason | null>(null);
-  const [savedDecision, setSavedDecision] = useState<CandidateDecision | null>(null);
+  const [savedDecision, setSavedDecision] = useState<CandidateDecision | null>(
+    candidate?.latest_decision ?? null
+  );
   const [savedPassReason, setSavedPassReason] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [passReason, setPassReason] = useState("");
@@ -76,7 +78,7 @@ export function CandidateDetailPage({
     setReviewJobStatus("idle");
     setReview(null);
     setDraft(null);
-    setSavedDecision(null);
+    setSavedDecision(candidate?.latest_decision ?? null);
     setSavedPassReason(null);
     setNotes("");
     setPassReason("");
@@ -94,6 +96,7 @@ export function CandidateDetailPage({
       .then((freshCandidate) => {
         if (!ignore) {
           setLoadedCandidate(freshCandidate);
+          setSavedDecision(freshCandidate.latest_decision ?? null);
         }
       })
       .catch(() => undefined);

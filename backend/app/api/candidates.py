@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
-from app.db.models import Candidate, SearchResult, SearchRun
+from app.db.models import Candidate, CandidateDecision, SearchResult, SearchRun
 from app.db.session import get_session
 from app.schemas import CandidateListItem
 
@@ -27,15 +27,32 @@ def latest_search_result_for_candidate(
     return None, None
 
 
+def latest_decision_for_candidate(
+    session: Session, candidate_id: str, job_id: str | None
+) -> CandidateDecision | None:
+    if job_id is None:
+        return None
+    return session.exec(
+        select(CandidateDecision)
+        .where(
+            CandidateDecision.candidate_id == candidate_id,
+            CandidateDecision.job_id == job_id,
+        )
+        .order_by(CandidateDecision.updated_at.desc(), CandidateDecision.created_at.desc())
+    ).first()
+
+
 def candidate_list_item(
     session: Session, candidate: Candidate, job_id: str | None
 ) -> CandidateListItem:
     search_result, search_run = latest_search_result_for_candidate(session, candidate.id, job_id)
+    latest_decision = latest_decision_for_candidate(session, candidate.id, job_id)
     return CandidateListItem(
         **candidate.model_dump(),
         last_search_run_id=search_run.id if search_run is not None else None,
         last_search_query=search_run.query if search_run is not None else None,
         last_search_rank=search_result.rank if search_result is not None else None,
+        latest_decision=latest_decision,
     )
 
 

@@ -69,10 +69,25 @@ class CandidateRead(BaseModel):
     updated_at: datetime
 
 
+class CandidateDecisionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    job_id: str
+    candidate_id: str
+    review_id: str | None = None
+    decision: str
+    notes: str | None = None
+    decided_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class CandidateListItem(CandidateRead):
     last_search_run_id: str | None = None
     last_search_query: str | None = None
     last_search_rank: int | None = None
+    latest_decision: CandidateDecisionRead | None = None
 
 
 class SearchRunRead(BaseModel):

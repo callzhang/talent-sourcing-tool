@@ -114,6 +114,11 @@ export function CandidatesPage({
               <strong>{candidate.name}</strong>
               <span>{candidate.headline ?? "未获取简介"}</span>
               <span>{[candidate.current_company, candidate.location].filter(Boolean).join(" · ")}</span>
+              {candidate.latest_decision ? (
+                <span className={`decision-status decision-status-${candidate.latest_decision.decision}`}>
+                  {candidate.latest_decision.decision === "pass" ? "已淘汰" : "已推进"}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -173,7 +178,15 @@ function CandidateDetail({
     <div className="candidate-detail">
       <div className="split-heading">
         <h3>{candidate.name}</h3>
-        <span>{candidate.last_search_rank ? `第 ${candidate.last_search_rank} 名` : "已入库"}</span>
+        <span>
+          {candidate.latest_decision
+            ? candidate.latest_decision.decision === "pass"
+              ? "已淘汰"
+              : "已推进"
+            : candidate.last_search_rank
+              ? `第 ${candidate.last_search_rank} 名`
+              : "已入库"}
+        </span>
       </div>
       <p>{candidate.headline ?? "未获取简介"}</p>
       <p className="muted">

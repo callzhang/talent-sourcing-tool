@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel
 
-from app.db.models import Candidate, Job, SearchResult, SearchRun
+from app.db.models import Candidate, CandidateDecision, Job, SearchResult, SearchRun
 from app.db.session import create_db_engine, get_session
 from app.main import app
 
@@ -72,6 +72,32 @@ def test_get_candidate_returns_candidate_detail(client: TestClient, engine: Engi
     assert data["id"] == candidate_id
     assert data["profile_url"] == "https://www.linkedin.com/in/searched"
     assert data["last_search_query"] == "AI product marketer"
+
+
+def test_candidate_responses_include_the_latest_decision_for_the_selected_job(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id, _unsearched_candidate_id = seed_candidates(engine)
+    with Session(engine) as session:
+        session.add(
+            CandidateDecision(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                decision="proceed",
+                notes="安排招聘负责人面试。",
+                decided_by="hr",
+            )
+        )
+        session.commit()
+
+    list_response = client.get(f"/api/candidates?job_id={job_id}")
+    detail_response = client.get(f"/api/candidates/{candidate_id}?job_id={job_id}")
+
+    assert list_response.status_code == 200
+    assert detail_response.status_code == 200
+    for candidate in [list_response.json()[0], detail_response.json()]:
+        assert candidate["latest_decision"]["decision"] == "proceed"
+        assert candidate["latest_decision"]["notes"] == "安排招聘负责人面试。"
 
 
 def test_get_candidate_404s_for_missing_candidate(client: TestClient):

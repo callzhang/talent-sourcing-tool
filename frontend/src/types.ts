@@ -129,6 +129,7 @@ export type Candidate = {
   last_search_run_id?: string | null;
   last_search_query?: string | null;
   last_search_rank?: number | null;
+  latest_decision?: CandidateDecision | null;
 };
 
 export type SearchRun = {
@@ -207,6 +208,8 @@ export type CandidateDecision = {
   decision: "pass" | "proceed";
   notes: string | null;
   decided_by: string;
+  created_at?: ISODateString;
+  updated_at?: ISODateString;
 };
 
 export type RefinementSuggestion = {

@@ -322,6 +322,49 @@ it("shows the saved decision and prevents it from being overwritten", async () =
   expect(screen.getByRole("button", { name: "开始 AI 评审" })).toBeDisabled();
 });
 
+it("rehydrates a persisted decision when the candidate detail is reopened", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/candidates/candidate_1?job_id=job_1")) {
+      return jsonResponse({
+        ...candidateOne,
+        latest_decision: {
+          id: "decision_saved",
+          job_id: "job_1",
+          candidate_id: "candidate_1",
+          review_id: "review_1",
+          decision: "pass",
+          notes: "缺少可核验的产品交付证据。",
+          decided_by: "hr"
+        }
+      });
+    }
+    if (url.endsWith("/api/reviews/latest?job_id=job_1&candidate_id=candidate_1")) {
+      return jsonResponse(reviewOne);
+    }
+    if (url.endsWith("/api/reviews/latest-job?job_id=job_1&candidate_id=candidate_1")) {
+      return jsonResponse(null);
+    }
+    return jsonResponse(null);
+  });
+
+  render(
+    <CandidateDetailPage
+      selectedJobId="job_1"
+      candidate={candidateOne}
+      systemStatus={null}
+      onBack={() => undefined}
+    />
+  );
+
+  expect(await screen.findByLabelText("已保存决定")).toBeInTheDocument();
+  expect(screen.getByText("已淘汰")).toBeInTheDocument();
+  expect(screen.getByText("缺少可核验的产品交付证据。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "确认推进" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "确认淘汰" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "开始 AI 评审" })).toBeDisabled();
+});
+
 it("ignores a stale in-flight draft after the candidate changes", async () => {
   let resolveDraft: (response: Response) => void = () => undefined;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
