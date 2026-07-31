@@ -248,12 +248,78 @@ it("renders review fallback fields and draft evidence", async () => {
   expect(screen.getByText("暂无建议")).toBeInTheDocument();
   expect(screen.getByText("未返回评审摘要。")).toBeInTheDocument();
   expect(screen.getByText("证据 1")).toBeInTheDocument();
-  expect(screen.getByText("无详情")).toBeInTheDocument();
+  expect(
+    screen.getAllByText("该条评审未提供可核验的文本或链接，不能作为决定依据。")
+  ).toHaveLength(2);
   expect(screen.getByText("Portfolio")).toBeInTheDocument();
-  expect(screen.getByText("https://example.com")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "查看公开来源" })).toHaveAttribute(
+    "href",
+    "https://example.com"
+  );
 
   fireEvent.click(screen.getByRole("button", { name: "生成淘汰原因草稿" }));
   expect(await screen.findByText("No shipped prototypes")).toBeInTheDocument();
+});
+
+it("shows the saved decision and prevents it from being overwritten", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (url.endsWith("/api/candidates/candidate_1?job_id=job_1")) {
+      return jsonResponse({
+        ...candidateOne,
+        last_search_query: "AI PMM San Francisco",
+        profile_data: {
+          raw: {
+            signals: ["具备 AI 产品上市与用户研究经验。"],
+            sources: [{ source_type: "github" }]
+          }
+        }
+      });
+    }
+    if (url.endsWith("/api/reviews/latest?job_id=job_1&candidate_id=candidate_1")) {
+      return jsonResponse(reviewOne);
+    }
+    if (url.endsWith("/api/reviews/latest-job?job_id=job_1&candidate_id=candidate_1")) {
+      return jsonResponse(null);
+    }
+    if (url.endsWith("/api/reviews/decision") && method === "POST") {
+      return jsonResponse({
+        id: "decision_1",
+        job_id: "job_1",
+        candidate_id: "candidate_1",
+        review_id: "review_1",
+        decision: "proceed",
+        notes: "进入招聘负责人面试。",
+        decided_by: "hr"
+      });
+    }
+    return jsonResponse(null);
+  });
+
+  render(
+    <CandidateDetailPage
+      selectedJobId="job_1"
+      candidate={candidateOne}
+      systemStatus={null}
+      onBack={() => undefined}
+    />
+  );
+
+  expect(await screen.findByText("具备 AI 产品上市与用户研究经验。")).toBeInTheDocument();
+  expect(screen.getByText("候选人所在地区")).toBeInTheDocument();
+  expect(screen.getByText("Remote")).toBeInTheDocument();
+  expect(screen.getByText("LinkedIn、GitHub")).toBeInTheDocument();
+  expect(screen.getByText("AI PMM San Francisco")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "确认推进" }));
+
+  expect(await screen.findByLabelText("已保存决定")).toBeInTheDocument();
+  expect(screen.getByText("已推进")).toBeInTheDocument();
+  expect(screen.getByText("进入招聘负责人面试。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "确认推进" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "确认淘汰" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "开始 AI 评审" })).toBeDisabled();
 });
 
 it("ignores a stale in-flight draft after the candidate changes", async () => {

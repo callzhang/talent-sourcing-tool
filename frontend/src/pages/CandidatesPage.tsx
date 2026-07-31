@@ -167,6 +167,7 @@ function CandidateDetail({
   const signals = stringList(raw.signals);
   const risks = stringList(raw.risks);
   const sources = sourceList(raw.sources);
+  const channels = candidateChannels(candidate, raw);
 
   return (
     <div className="candidate-detail">
@@ -181,6 +182,20 @@ function CandidateDetail({
       <a href={candidate.profile_url} target="_blank" rel="noreferrer">
         打开 {sourceLabel(candidate.profile_source)} 资料
       </a>
+      <div className="candidate-profile-summary">
+        <p className="detail-label">岗位匹配信息</p>
+        <p>{signals[0] ?? "尚未提取到可确认的岗位匹配信号。"}</p>
+        <p className="detail-label">候选人所在地区</p>
+        <p>{candidate.location ?? "公开资料未提供所在地。"}</p>
+        <p className="detail-label">搜索渠道</p>
+        <p>{channels.join("、")}</p>
+        {candidate.last_search_query ? (
+          <>
+            <p className="detail-label">本次搜索关键词</p>
+            <p>{candidate.last_search_query}</p>
+          </>
+        ) : null}
+      </div>
       <EvidenceList label="匹配信号" items={signals} />
       <EvidenceList label="风险信号" items={risks} />
       {sources.length > 0 ? (
@@ -204,6 +219,28 @@ function CandidateDetail({
       </button>
     </div>
   );
+}
+
+function candidateChannels(candidate: Candidate, raw: Record<string, unknown>): string[] {
+  const channels = new Set([sourceLabel(candidate.profile_source)]);
+  const sources = raw.sources;
+  if (Array.isArray(sources)) {
+    for (const source of sources) {
+      if (typeof source === "object" && source !== null && !Array.isArray(source)) {
+        const sourceRecord = source as Record<string, unknown>;
+        const sourceType =
+          typeof sourceRecord.source_type === "string"
+            ? sourceRecord.source_type
+            : typeof sourceRecord.channel === "string"
+              ? sourceRecord.channel
+              : null;
+        if (sourceType) {
+          channels.add(sourceLabel(sourceType));
+        }
+      }
+    }
+  }
+  return [...channels];
 }
 
 function EvidenceList({ label, items }: { label: string; items: string[] }) {

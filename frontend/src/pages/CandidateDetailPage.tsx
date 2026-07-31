@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   Candidate,
+  CandidateDecision,
   DraftPassReason,
   ReviewJob,
   ReviewPayload,
@@ -37,6 +38,8 @@ export function CandidateDetailPage({
   const [reviewJobStatus, setReviewJobStatus] = useState<ReviewStageKey>("idle");
   const [review, setReview] = useState<ReviewPayload | null>(null);
   const [draft, setDraft] = useState<DraftPassReason | null>(null);
+  const [savedDecision, setSavedDecision] = useState<CandidateDecision | null>(null);
+  const [savedPassReason, setSavedPassReason] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [passReason, setPassReason] = useState("");
   const [status, setStatus] = useState("已准备好进行 AI 评审。");
@@ -62,7 +65,8 @@ export function CandidateDetailPage({
     review,
     reviewContext
   });
-  const decisionLocked = reviewStage.key === "running" || reviewStage.key === "pending";
+  const decisionLocked =
+    reviewStage.key === "running" || reviewStage.key === "pending" || savedDecision !== null;
   const reviewReadyForDecision = reviewStage.key === "completed";
 
   useEffect(() => {
@@ -72,6 +76,8 @@ export function CandidateDetailPage({
     setReviewJobStatus("idle");
     setReview(null);
     setDraft(null);
+    setSavedDecision(null);
+    setSavedPassReason(null);
     setNotes("");
     setPassReason("");
     setIsWorking(false);
@@ -329,7 +335,7 @@ export function CandidateDetailPage({
     setIsWorking(true);
     setStatus(`正在保存${decision === "pass" ? "淘汰" : "推进"}决定...`);
     try {
-      await api.createDecision({
+      const persistedDecision = await api.createDecision({
         job_id: requestedJobId,
         candidate_id: requestedCandidateId,
         review_id: requestedReviewContext?.reviewId,
@@ -339,6 +345,8 @@ export function CandidateDetailPage({
         pass_reason_text: decision === "pass" ? passReason : undefined
       });
       if (isCurrentCandidateContext(requestedJobId, requestedCandidateId)) {
+        setSavedDecision(persistedDecision);
+        setSavedPassReason(decision === "pass" ? passReason.trim() : null);
         setStatus(`已保存${decision === "pass" ? "淘汰" : "推进"}决定。`);
       }
     } catch (error) {
@@ -397,6 +405,10 @@ export function CandidateDetailPage({
         <a href={loadedCandidate.profile_url} target="_blank" rel="noreferrer">
           打开 {profileSourceLabel(loadedCandidate.profile_source)} 资料
         </a>
+        <CandidateProfileSummary candidate={loadedCandidate} />
+        {savedDecision ? (
+          <SavedDecision decision={savedDecision} passReason={savedPassReason} />
+        ) : null}
         <div className="review-status-panel" aria-label="评审状态">
           <div className="split-heading">
             <span className={`status-pill status-pill-${reviewStage.tone}`}>{reviewStage.label}</span>
@@ -422,7 +434,7 @@ export function CandidateDetailPage({
           type="button"
           className="secondary-action"
           onClick={draftPassReason}
-          disabled={isWorking || reviewId === null || !reviewReadyForDecision}
+          disabled={isWorking || reviewId === null || !reviewReadyForDecision || savedDecision !== null}
         >
           生成淘汰原因草稿
         </button>
@@ -431,6 +443,9 @@ export function CandidateDetailPage({
 
       <form className="card stack" onSubmit={handleProceed}>
         <p className="section-kicker">人工决定</p>
+        {savedDecision ? (
+          <p className="muted">该候选人的决定已保存；如需变更，请由招聘负责人按正式流程处理。</p>
+        ) : null}
         <label>
           决定备注与反馈
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} />
@@ -447,12 +462,16 @@ export function CandidateDetailPage({
           <button
             type="button"
             className="danger-action"
-            disabled={isWorking || !reviewReadyForDecision}
+            disabled={isWorking || !reviewReadyForDecision || savedDecision !== null}
             onClick={() => void submitDecision("pass")}
           >
             确认淘汰
           </button>
-          <button type="submit" className="primary-action" disabled={isWorking || !reviewReadyForDecision}>
+          <button
+            type="submit"
+            className="primary-action"
+            disabled={isWorking || !reviewReadyForDecision || savedDecision !== null}
+          >
             确认推进
           </button>
         </div>
@@ -567,6 +586,97 @@ function isReviewJob(value: unknown): value is ReviewJob {
   );
 }
 
+function CandidateProfileSummary({ candidate }: { candidate: Candidate }) {
+  const raw = profileRaw(candidate);
+  const signals = textItems(raw.signals);
+  const risks = textItems(raw.risks);
+  const channels = candidateChannels(candidate, raw);
+
+  return (
+    <div className="candidate-profile-summary" aria-label="候选人匹配信息">
+      <p className="detail-label">岗位匹配信息</p>
+      <p>{signals[0] ?? "尚未提取到可确认的岗位匹配信号。"}</p>
+      <p className="detail-label">候选人所在地区</p>
+      <p>{candidate.location ?? "公开资料未提供所在地。"}</p>
+      <p className="detail-label">搜索渠道</p>
+      <p>{channels.join("、")}</p>
+      {candidate.last_search_query ? (
+        <>
+          <p className="detail-label">本次搜索关键词</p>
+          <p>{candidate.last_search_query}</p>
+        </>
+      ) : null}
+      {signals.length > 1 ? <TextEvidenceList label="其他匹配信号" items={signals.slice(1)} /> : null}
+      {risks.length > 0 ? <TextEvidenceList label="需核实的风险" items={risks} /> : null}
+    </div>
+  );
+}
+
+function SavedDecision({
+  decision,
+  passReason
+}: {
+  decision: CandidateDecision;
+  passReason: string | null;
+}) {
+  const label = decision.decision === "pass" ? "已淘汰" : "已推进";
+  return (
+    <div className="saved-decision-panel" aria-label="已保存决定">
+      <div className="split-heading">
+        <p className="detail-label">已保存决定</p>
+        <span className={`status-pill status-pill-${decision.decision === "pass" ? "error" : "success"}`}>
+          {label}
+        </span>
+      </div>
+      <p>{decision.notes?.trim() || "未填写决定备注。"}</p>
+      {passReason ? <p className="muted">淘汰原因：{passReason}</p> : null}
+    </div>
+  );
+}
+
+function profileRaw(candidate: Candidate): Record<string, unknown> {
+  const raw = candidate.profile_data.raw;
+  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
+}
+
+function textItems(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => (typeof item === "string" && item.trim() ? [item.trim()] : []));
+}
+
+function candidateChannels(candidate: Candidate, raw: Record<string, unknown>): string[] {
+  const channels = new Set([profileSourceLabel(candidate.profile_source)]);
+  const sources = raw.sources;
+  if (Array.isArray(sources)) {
+    for (const source of sources) {
+      if (typeof source === "object" && source !== null && !Array.isArray(source)) {
+        const sourceType = (source as Record<string, unknown>).source_type;
+        if (typeof sourceType === "string" && sourceType.trim()) {
+          channels.add(profileSourceLabel(sourceType));
+        }
+      }
+    }
+  }
+  return [...channels];
+}
+
+function TextEvidenceList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div>
+      <p className="detail-label">{label}</p>
+      <ul className="compact-list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function profileSourceLabel(value: string): string {
   return (
     {
@@ -591,14 +701,61 @@ function ReviewBlock({ review }: { review: ReviewPayload | null }) {
       <p>{review.decision_summary ?? "未返回评审摘要。"}</p>
       <div className="evidence-grid">
         {(review.evidence ?? []).map((item, index) => (
-          <article key={`${String(item.label ?? "evidence")}-${index}`} className="evidence-card">
-            <strong>{String(item.label ?? `证据 ${index + 1}`)}</strong>
-            <span>{String(item.detail ?? item.url ?? "无详情")}</span>
-          </article>
+          <ReviewEvidenceCard key={`${String(item.label ?? "evidence")}-${index}`} item={item} index={index} />
         ))}
       </div>
     </div>
   );
+}
+
+function ReviewEvidenceCard({ item, index }: { item: Record<string, unknown>; index: number }) {
+  const label = readableEvidenceText(item.label) ?? `证据 ${index + 1}`;
+  const detail = firstEvidenceDetail(item);
+  const url = evidenceUrl(item);
+  return (
+    <article className="evidence-card">
+      <strong>{label}</strong>
+      <span>
+        {detail ?? "该条评审未提供可核验的文本或链接，不能作为决定依据。"}
+      </span>
+      {url ? (
+        <a href={url} target="_blank" rel="noreferrer">
+          查看公开来源
+        </a>
+      ) : null}
+    </article>
+  );
+}
+
+function firstEvidenceDetail(item: Record<string, unknown>): string | null {
+  for (const field of ["detail", "summary", "quote", "rationale", "evidence", "reason", "content"]) {
+    const text = readableEvidenceText(item[field]);
+    if (text) {
+      return text;
+    }
+  }
+  return null;
+}
+
+function evidenceUrl(item: Record<string, unknown>): string | null {
+  for (const field of ["url", "source_url", "source"]) {
+    const value = item[field];
+    if (typeof value === "string" && /^https?:\/\//.test(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function readableEvidenceText(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    const entries = value.flatMap((item) => (typeof item === "string" && item.trim() ? [item.trim()] : []));
+    return entries.length > 0 ? entries.join("；") : null;
+  }
+  return null;
 }
 
 function recommendationLabel(recommendation: string | null | undefined): string {

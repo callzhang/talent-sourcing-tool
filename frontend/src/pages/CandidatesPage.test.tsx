@@ -85,8 +85,13 @@ it("renders candidate listings in the left pane and selected candidate details i
   const detailPane = await screen.findByRole("region", { name: "候选人详情" });
 
   expect(queuePane).toContainElement(within(queuePane).getByRole("button", { name: /Candidate One/ }));
-  expect(detailPane).toContainElement(screen.getByText("Evidence of structured PMF interviews."));
-  expect(detailPane).toContainElement(screen.getByText("GitHub: Portfolio source"));
+  expect(detailPane).toContainElement(
+    within(detailPane).getAllByText("Evidence of structured PMF interviews.")[0]
+  );
+  expect(detailPane).toContainElement(within(detailPane).getByText("GitHub: Portfolio source"));
+  expect(detailPane).toContainElement(within(detailPane).getByText("候选人所在地区"));
+  expect(detailPane).toContainElement(within(detailPane).getByText("搜索渠道"));
+  expect(detailPane).toContainElement(within(detailPane).getByText("LinkedIn、GitHub"));
   expect(queuePane.compareDocumentPosition(detailPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
@@ -281,6 +286,7 @@ const candidate: Candidate = {
 
 const candidateWithEvidence: Candidate = {
   ...candidate,
+  last_search_query: "Founding PMM San Francisco",
   profile_data: {
     raw: {
       signals: ["Evidence of structured PMF interviews."],

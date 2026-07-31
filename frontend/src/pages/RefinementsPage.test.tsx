@@ -10,7 +10,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("renders persisted refinement suggestions with reason-code metadata", async () => {
+it("renders persisted refinement suggestions with HR-readable status and reasons", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
       JSON.stringify([
@@ -47,8 +47,12 @@ it("renders persisted refinement suggestions with reason-code metadata", async (
   expect(
     screen.getByText("Search for AI prototype builders with public launch evidence.")
   ).toBeInTheDocument();
+  expect(screen.getByText("建议调整搜索条件")).toBeInTheDocument();
+  expect(screen.getByText("待 HR 审阅")).toBeInTheDocument();
   expect(
-    screen.getByText("insufficient_public_evidence, weak_builder_evidence")
+    screen.getByText(
+      "产生原因：公开资料不足，无法确认关键经历；缺少亲自交付或产品构建证据"
+    )
   ).toBeInTheDocument();
 });
 
@@ -123,7 +127,7 @@ it("keeps refinement metadata rendering safe when reason codes are missing", asy
   );
 
   expect(await screen.findByText("Clarify required portfolio evidence.")).toBeInTheDocument();
-  expect(screen.getByText("未记录原因代码")).toBeInTheDocument();
+  expect(screen.getByText("产生原因：未提供具体淘汰原因")).toBeInTheDocument();
 });
 
 it("selects a different JD from the refinement filter", () => {

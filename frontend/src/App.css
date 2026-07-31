@@ -498,6 +498,25 @@ h3 {
   gap: 12px;
 }
 
+.candidate-profile-summary,
+.saved-decision-panel {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.candidate-profile-summary p,
+.saved-decision-panel p {
+  margin-bottom: 0;
+}
+
+.saved-decision-panel {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
 .search-channel-summary {
   display: grid;
   gap: 6px;

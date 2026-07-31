@@ -69,10 +69,10 @@ export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: Refinement
         <div className="refinement-grid">
           {suggestions.map((suggestion) => (
             <article key={suggestion.id} className="refinement-card">
-              <p className="rank-pill">{suggestion.suggestion_type}</p>
-              <h3>{suggestion.status}</h3>
+              <p className="rank-pill">{suggestionTypeLabel(suggestion.suggestion_type)}</p>
+              <h3>{suggestionStatusLabel(suggestion.status)}</h3>
               <p>{suggestion.suggestion_text}</p>
-              <span>{reasonCodes(suggestion)}</span>
+              <span>产生原因：{reasonCodes(suggestion)}</span>
             </article>
           ))}
           {suggestions.length === 0 ? (
@@ -87,7 +87,42 @@ export function RefinementsPage({ jobs, selectedJobId, onSelectJob }: Refinement
 function reasonCodes(suggestion: RefinementSuggestion) {
   const reasonCodesValue = suggestion.suggestion_metadata.reason_codes;
   if (!Array.isArray(reasonCodesValue) || reasonCodesValue.length === 0) {
-    return "未记录原因代码";
+    return "未提供具体淘汰原因";
   }
-  return reasonCodesValue.map(String).join(", ");
+  return reasonCodesValue.map((reasonCode) => reasonCodeLabel(String(reasonCode))).join("；");
+}
+
+function suggestionTypeLabel(value: string): string {
+  return (
+    {
+      feedback_review: "基于淘汰反馈的岗位优化",
+      query_rewrite: "建议调整搜索条件",
+      rubric_adjustment: "建议调整评估标准"
+    }[value] ?? "岗位优化建议"
+  );
+}
+
+function suggestionStatusLabel(value: string): string {
+  return (
+    {
+      pending: "待 HR 审阅",
+      applied: "已采纳",
+      dismissed: "未采纳",
+      rejected: "未采纳"
+    }[value] ?? "待处理"
+  );
+}
+
+function reasonCodeLabel(value: string): string {
+  return (
+    {
+      insufficient_public_evidence: "公开资料不足，无法确认关键经历",
+      weak_builder_evidence: "缺少亲自交付或产品构建证据",
+      insufficient_ai_native_signal: "缺少 AI 产品实践信号",
+      too_enterprise_sales_oriented: "经历偏企业销售，和岗位侧重点不匹配",
+      platform_only_background: "经历偏平台建设，缺少目标岗位所需经验",
+      solutions_architecture_mismatch: "解决方案架构经历与岗位要求不匹配",
+      consulting_heavy_profile: "咨询经历占比较高，需补充直接业务负责证据"
+    }[value] ?? "其他需要核实的岗位匹配问题"
+  );
 }
