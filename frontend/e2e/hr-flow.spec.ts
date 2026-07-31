@@ -154,7 +154,7 @@ async function runHrFlow(
   await page.getByRole("button", { name: "岗位优化", exact: true }).click();
   await expect(page.getByRole("heading", { name: "岗位优化建议" })).toBeVisible();
   await expect(page.getByText("已根据淘汰原因生成优化建议。")).toBeVisible();
-});
+}
 
 async function setChannel(page: Page, label: string, checked: boolean) {
   const checkbox = page.getByRole("checkbox", { name: label, exact: true });
