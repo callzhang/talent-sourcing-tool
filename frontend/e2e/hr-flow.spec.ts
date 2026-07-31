@@ -12,6 +12,10 @@ test("HR flow: create job, search candidate, review, and submit decision", async
     if (jobId) {
       const cleanupResponse = await page.request.delete(`/api/jobs/${encodeURIComponent(jobId)}`);
       expect(cleanupResponse.status()).toBe(204);
+      const jobsResponse = await page.request.get("/api/jobs");
+      expect(jobsResponse.status()).toBe(200);
+      const remainingJobs = (await jobsResponse.json()) as Array<{ id: string }>;
+      expect(remainingJobs.some((job) => job.id === jobId)).toBe(false);
     }
   }
 });
