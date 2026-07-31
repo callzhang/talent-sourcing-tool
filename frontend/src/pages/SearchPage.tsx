@@ -329,31 +329,62 @@ function RunProgress({ progress = {} }: { progress?: Record<string, unknown> }) 
   const total = typeof progress.total_channels === "number" ? progress.total_channels : 0;
   const active = typeof progress.active_channel === "string" ? progress.active_channel : null;
   const errorMessage = typeof progress.error_message === "string" ? progress.error_message : null;
-  const channelErrors = channelErrorsForProgress(progress);
+  const channels = channelProgressForDisplay(progress);
 
   return (
     <div className="run-progress">
-      <span aria-label={`执行器 ${worker}；已完成 ${completed}/${total} 个渠道`}>
-        执行器 {worker} · 已完成 {completed}/{total} 个渠道
+      <span aria-label={`执行器 ${worker}；已处理 ${completed}/${total} 个渠道`}>
+        执行器 {worker} · 已处理 {completed}/{total} 个渠道
         {active ? ` · ${channelLabel(active)}` : ""}
       </span>
-      {channelErrors.map(([channel, error]) => (
-        <span key={channel} className="run-channel-error">
-          {channelLabel(channel)} 失败：{error}
+      {channels.map(({ channel, status, candidateCount }) => (
+        <span
+          key={channel}
+          className={status === "failed" ? "run-channel-error" : undefined}
+        >
+          {channelLabel(channel)}：{channelStatusLabel(status)} · {candidateCount} 位候选人
         </span>
       ))}
-      {errorMessage ? <span className="run-channel-error">任务失败：{errorMessage}</span> : null}
+      {errorMessage ? <span className="run-channel-error">任务失败，请重试或联系管理员。</span> : null}
     </div>
   );
 }
 
-function channelErrorsForProgress(progress: Record<string, unknown>): Array<[string, string]> {
-  const value = progress.channel_errors;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+function channelProgressForDisplay(
+  progress: Record<string, unknown>
+): Array<{ channel: string; status: string; candidateCount: number }> {
+  const channels = progress.channels;
+  if (typeof channels === "object" && channels !== null && !Array.isArray(channels)) {
+    return Object.entries(channels).flatMap(([channel, raw]) => {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        return [];
+      }
+      const entry = raw as Record<string, unknown>;
+      return [
+        {
+          channel,
+          status: typeof entry.status === "string" ? entry.status : "pending",
+          candidateCount: typeof entry.candidate_count === "number" ? entry.candidate_count : 0
+        }
+      ];
+    });
+  }
+
+  const errors = progress.channel_errors;
+  if (typeof errors !== "object" || errors === null || Array.isArray(errors)) {
     return [];
   }
-  return Object.entries(value).flatMap(([channel, error]) =>
-    typeof error === "string" && error.length > 0 ? [[channel, error]] : []
+  return Object.keys(errors).map((channel) => ({ channel, status: "failed", candidateCount: 0 }));
+}
+
+function channelStatusLabel(status: string): string {
+  return (
+    {
+      pending: "等待执行",
+      running: "正在搜索",
+      completed: "成功",
+      failed: "失败"
+    }[status] ?? status
   );
 }
 

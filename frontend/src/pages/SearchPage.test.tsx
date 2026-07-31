@@ -130,8 +130,8 @@ it("loads persisted runs and reports candidates from a new search", async () => 
   expect(screen.getAllByText("LinkedIn + GitHub + Exa + Bright Data Discover")).toHaveLength(2);
   expect(screen.getAllByText("San Francisco, CA")).toHaveLength(2);
   expect(screen.getAllByText("搜索渠道")).toHaveLength(2);
-  expect(await screen.findByText("LinkedIn 失败：上游服务不可用")).toBeInTheDocument();
-  expect(await screen.findByText("任务失败：LinkedIn upstream unavailable")).toBeInTheDocument();
+  expect(await screen.findByText("LinkedIn：失败 · 0 位候选人")).toBeInTheDocument();
+  expect(await screen.findByText("任务失败，请重试或联系管理员。")).toBeInTheDocument();
   expect(fetchMock).not.toHaveBeenCalledWith(
     "/api/search/search_run_old",
     expect.objectContaining({ method: "GET" })
@@ -182,6 +182,52 @@ it("requires a selected JD before searching", () => {
   fireEvent.submit(screen.getByLabelText("搜索条件").closest("form") as HTMLFormElement);
 
   expect(screen.getByText("请先创建或选择岗位。")).toBeInTheDocument();
+});
+
+it("shows each channel outcome without exposing upstream diagnostics", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+    if (String(input).endsWith("/api/search?job_id=job_1")) {
+      return jsonResponse([
+        {
+          id: "search_run_channels",
+          job_id: "job_1",
+          query: "configured search",
+          provider: "bright_data",
+          channels: ["github", "exa"],
+          status: "completed",
+          params: { region: "San Francisco, CA" },
+          progress: {
+            worker: 1,
+            stage: "completed",
+            total_channels: 2,
+            completed_channels: 2,
+            channels: {
+              github: { status: "failed", candidate_count: 0 },
+              exa: { status: "completed", candidate_count: 2 }
+            }
+          },
+          candidate_count: 2,
+          created_at: "2026-07-31T00:00:00Z",
+          completed_at: "2026-07-31T00:01:00Z"
+        }
+      ]);
+    }
+    return jsonResponse([]);
+  });
+
+  render(
+    <SearchPage
+      jobs={[job]}
+      selectedJobId="job_1"
+      systemStatus={null}
+      onSelectJob={() => undefined}
+      onCandidatesFound={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  expect(await screen.findByText("GitHub：失败 · 0 位候选人")).toBeInTheDocument();
+  expect(screen.getByText("Exa：成功 · 2 位候选人")).toBeInTheDocument();
 });
 
 it("persists a queued run immediately and reports its worker progress", async () => {
@@ -235,7 +281,7 @@ it("persists a queued run immediately and reports its worker progress", async ()
 
   expect(await screen.findByText("1 条已保存记录")).toBeInTheDocument();
   expect(screen.getByText("等待执行 · 0 位候选人")).toBeInTheDocument();
-  expect(screen.getByLabelText("执行器 1；已完成 0/4 个渠道")).toBeInTheDocument();
+  expect(screen.getByLabelText("执行器 1；已处理 0/4 个渠道")).toBeInTheDocument();
   await waitFor(() =>
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/search/search_run_new/run",
