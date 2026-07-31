@@ -496,6 +496,29 @@ def test_app_lifespan_initializes_tables_when_enabled(monkeypatch):
     assert calls == ["init", "yielded"]
 
 
+def test_app_lifespan_does_not_initialize_schema_on_vercel(monkeypatch):
+    from app.main import app, lifespan
+
+    calls = []
+
+    def fake_init_db():  # noqa: ANN202
+        calls.append("init")
+
+    monkeypatch.setattr("app.main.init_db", fake_init_db)
+    monkeypatch.setenv("VERCEL", "1")
+    app.state.create_tables_on_startup = True
+
+    async def run_lifespan() -> None:
+        async with lifespan(app):
+            calls.append("yielded")
+
+    import asyncio
+
+    asyncio.run(run_lifespan())
+
+    assert calls == ["yielded"]
+
+
 def test_decision_create_rejects_unknown_decision():
     with pytest.raises(ValidationError, match="decision must be pass or proceed"):
         DecisionCreate(job_id="job_1", candidate_id="candidate_1", decision="maybe")

@@ -503,6 +503,10 @@ TURSO_AUTH_TOKEN=...
 应用会将该 URL 通过 `sqlalchemy-libsql` 连接到 Turso；不要同时设置
 `DATABASE_URL` / `TALENT_DATABASE_URL`，避免存储来源不明确。
 
+线上 Function 启动时不会重复执行建表、迁移或默认岗位写入，以避免每次冷启动都对
+远程数据库做全量检查。数据库结构变更应在发布前由有生产数据库权限的运维环境执行
+`PYTHONPATH=backend .venv/bin/python -m app.db.init_db`，确认完成后再部署应用。
+
 原因很直接：
 
 - Vercel Function 本地文件系统不是持久化数据库

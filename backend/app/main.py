@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,9 +17,17 @@ from app.db.init_db import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    if getattr(app.state, "create_tables_on_startup", True):
+    if should_initialize_schema(app):
         init_db()
     yield
+
+
+def should_initialize_schema(app: FastAPI) -> bool:
+    """Keep local startup convenient without mutating the remote DB per Vercel instance."""
+    return (
+        getattr(app.state, "create_tables_on_startup", True)
+        and os.environ.get("VERCEL") != "1"
+    )
 
 
 def register_api_routers(app: FastAPI, *, prefixes: list[str]) -> None:
