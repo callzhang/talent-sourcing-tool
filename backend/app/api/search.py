@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from unicodedata import normalize as unicode_normalize
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +16,6 @@ from app.db.session import get_session
 from app.schemas import CandidateRead, SearchCreate, SearchRunDetail, SearchRunRead
 from app.services.sourcing import (
     CandidateSourceResult,
-    SourcingConfigError,
     canonical_profile_url,
     default_job_search_channels,
     get_sourcing_connector,
@@ -56,7 +57,7 @@ def candidate_payload(result: CandidateSourceResult) -> dict[str, Any]:
 
 def normalize_result(result: CandidateSourceResult) -> CandidateSourceResult:
     return CandidateSourceResult(
-        profile_url=canonical_profile_url(result.profile_url),
+        profile_url=normalized_candidate_url(result.profile_url),
         profile_source=result.profile_source,
         name=result.name,
         headline=result.headline,
@@ -67,24 +68,85 @@ def normalize_result(result: CandidateSourceResult) -> CandidateSourceResult:
     )
 
 
+def normalized_identity_text(value: str | None) -> str:
+    if not value:
+        return ""
+    return " ".join(unicode_normalize("NFKC", value).casefold().split())
+
+
+def normalized_candidate_url(profile_url: str) -> str:
+    canonical_url = canonical_profile_url(profile_url)
+    parsed = urlsplit(canonical_url)
+    hostname = parsed.hostname.casefold() if parsed.hostname else ""
+    if hostname.startswith("www."):
+        hostname = hostname.removeprefix("www.")
+    port = parsed.port
+    netloc = hostname if port is None or port == 443 else f"{hostname}:{port}"
+    path = parsed.path.rstrip("/") or "/"
+    if hostname in {"linkedin.com", "github.com"}:
+        path = path.casefold()
+    query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
+    return urlunsplit(("https", netloc, path, query, ""))
+
+
+def candidate_identity_keys(result: CandidateSourceResult) -> set[str]:
+    keys = {f"url:{normalized_candidate_url(result.profile_url)}"}
+    name = normalized_identity_text(result.name)
+    company = normalized_identity_text(result.current_company)
+    location = normalized_identity_text(result.location)
+    title = normalized_identity_text(result.current_title)
+    if name and company:
+        keys.add(f"identity:{name}|company:{company}")
+    elif name and location and title:
+        keys.add(f"identity:{name}|location:{location}|title:{title}")
+    return keys
+
+
 def dedupe_results(results: list[CandidateSourceResult]) -> list[CandidateSourceResult]:
     deduped: list[CandidateSourceResult] = []
-    seen_urls: set[str] = set()
+    seen_identities: set[str] = set()
     for result in results:
         normalized = normalize_result(result)
-        if normalized.profile_url in seen_urls:
+        identity_keys = candidate_identity_keys(normalized)
+        if identity_keys & seen_identities:
             continue
-        seen_urls.add(normalized.profile_url)
+        seen_identities.update(identity_keys)
         deduped.append(normalized)
     return deduped
+
+
+def channel_diagnostics(channel_errors: dict[str, Exception]) -> dict[str, Any]:
+    return {
+        "channels": {
+            channel: {"error_type": type(error).__name__, "message": str(error)}
+            for channel, error in channel_errors.items()
+        }
+    }
+
+
+def search_run_channel_progress(
+    search_run: SearchRun,
+) -> dict[str, dict[str, int | str]]:
+    progress = search_run_progress(search_run)
+    existing = progress.get("channels")
+    if not isinstance(existing, dict):
+        return {}
+    return {
+        str(channel): {
+            "status": str(details.get("status", "pending")),
+            "candidate_count": int(details.get("candidate_count", 0)),
+        }
+        for channel, details in existing.items()
+        if isinstance(details, dict)
+    }
 
 
 def mark_search_failed(
     session: Session,
     search_run_id: str,
-    error_message: str,
+    channel_errors: dict[str, Exception],
     *,
-    channel_errors: dict[str, str] | None = None,
+    error_message: str = "All selected search channels failed",
 ) -> None:
     session.rollback()
     search_run = session.get(SearchRun, search_run_id)
@@ -94,12 +156,12 @@ def mark_search_failed(
     search_run.completed_at = datetime.now(UTC)
     search_run.run_metadata = {
         **search_run.run_metadata,
+        "diagnostics": channel_diagnostics(channel_errors),
         "progress": {
             **search_run_progress(search_run),
             "stage": "failed",
             "active_channel": None,
             "error_message": error_message,
-            **({"channel_errors": channel_errors} if channel_errors else {}),
         },
     }
     session.add(search_run)
@@ -180,26 +242,19 @@ def update_search_progress(
     stage: str,
     completed_channels: int,
     active_channel: str | None,
-    channel_errors: dict[str, str] | None = None,
+    channel_progress: dict[str, dict[str, int | str]] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> None:
-    existing_progress = search_run_progress(search_run)
-    persisted_channel_errors = channel_errors
-    if persisted_channel_errors is None:
-        existing_errors = existing_progress.get("channel_errors")
-        persisted_channel_errors = (
-            {str(channel): str(error) for channel, error in existing_errors.items()}
-            if isinstance(existing_errors, dict)
-            else {}
-        )
     search_run.run_metadata = {
         **search_run.run_metadata,
+        **({"diagnostics": diagnostics} if diagnostics is not None else {}),
         "progress": {
             "worker": 1,
             "stage": stage,
             "total_channels": len(search_run_channels(search_run)),
             "completed_channels": completed_channels,
             "active_channel": active_channel,
-            **({"channel_errors": persisted_channel_errors} if persisted_channel_errors else {}),
+            "channels": channel_progress or search_run_channel_progress(search_run),
         },
     }
     session.add(search_run)
@@ -324,10 +379,13 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
 
     try:
         results: list[CandidateSourceResult] = []
-        seen_urls: set[str] = set()
-        channel_errors: dict[str, str] = {}
+        seen_identities: set[str] = set()
         limit = max(int(search_run_params(search_run).get("limit", 10)), 1)
         channels = search_run_channels(search_run)
+        channel_errors: dict[str, Exception] = {}
+        channel_progress: dict[str, dict[str, int | str]] = {
+            channel: {"status": "pending", "candidate_count": 0} for channel in channels
+        }
         connector = get_sourcing_connector()
         for index, channel in enumerate(channels, start=1):
             update_search_progress(
@@ -336,7 +394,10 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
                 stage="searching",
                 completed_channels=index - 1,
                 active_channel=channel,
+                channel_progress=channel_progress,
+                diagnostics=channel_diagnostics(channel_errors),
             )
+            channel_candidate_count = 0
             try:
                 channel_results = connector.search_people(
                     search_run.query,
@@ -346,11 +407,13 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
                     },
                 )
                 for result in dedupe_results(channel_results):
-                    if result.profile_url in seen_urls or len(results) >= limit:
+                    identity_keys = candidate_identity_keys(result)
+                    if identity_keys & seen_identities or len(results) >= limit:
                         continue
                     candidate = upsert_candidate(session, result)
-                    seen_urls.add(result.profile_url)
+                    seen_identities.update(identity_keys)
                     results.append(result)
+                    channel_candidate_count += 1
                     session.add(
                         SearchResult(
                             search_run_id=search_run.id,
@@ -368,22 +431,30 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
                     session.commit()
             except Exception as exc:
                 session.rollback()
-                channel_errors[channel] = str(exc)
+                channel_errors[channel] = exc
+                channel_progress[channel] = {
+                    "status": "failed",
+                    "candidate_count": channel_candidate_count,
+                }
+            else:
+                channel_progress[channel] = {
+                    "status": "completed",
+                    "candidate_count": channel_candidate_count,
+                }
             update_search_progress(
                 session,
                 search_run,
                 stage="searching",
                 completed_channels=index,
                 active_channel=None,
-                channel_errors=channel_errors,
+                channel_progress=channel_progress,
+                diagnostics=channel_diagnostics(channel_errors),
             )
 
         if len(channel_errors) == len(channels):
-            failure_summary = next(iter(channel_errors.values()))
             mark_search_failed(
                 session,
                 search_run.id,
-                failure_summary,
                 channel_errors=channel_errors,
             )
             refreshed_search_run = session.get(SearchRun, search_run.id)
@@ -397,7 +468,8 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
             stage="completed",
             completed_channels=len(channels),
             active_channel=None,
-            channel_errors=channel_errors,
+            channel_progress=channel_progress,
+            diagnostics=channel_diagnostics(channel_errors),
         )
         search_run.status = "completed"
         search_run.completed_at = datetime.now(UTC)
@@ -405,8 +477,8 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
         session.commit()
         session.refresh(search_run)
         return search_run
-    except (SourcingConfigError, Exception) as exc:
-        mark_search_failed(session, search_run.id, str(exc))
+    except Exception as exc:
+        mark_search_failed(session, search_run.id, {"worker": exc}, error_message="Search run failed")
         refreshed_search_run = session.get(SearchRun, search_run.id)
         if refreshed_search_run is None:
             raise HTTPException(status_code=404, detail="Search run not found") from exc
@@ -445,6 +517,14 @@ def create_search(
                 ),
                 "completed_channels": 0,
                 "active_channel": None,
+                "channels": {
+                    channel: {"status": "pending", "candidate_count": 0}
+                    for channel in (
+                        normalize_search_channels(search_create.channels)
+                        or job.search_channels
+                        or default_job_search_channels(job.title, job.description)
+                    )
+                },
             },
         },
     )

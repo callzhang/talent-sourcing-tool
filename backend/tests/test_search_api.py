@@ -89,7 +89,7 @@ def test_search_upserts_candidates_by_profile_url(client: TestClient, engine: En
     data = response.json()
     assert data["status"] == "completed"
     assert len(data["candidates"]) == 1
-    assert data["candidates"][0]["profile_url"].startswith("https://www.linkedin.com/in/")
+    assert data["candidates"][0]["profile_url"].startswith("https://linkedin.com/in/")
 
     repeat_response = client.post(
         "/api/search",
@@ -130,6 +130,10 @@ def test_search_persists_pending_run_before_worker_executes(client: TestClient, 
         "total_channels": 2,
         "completed_channels": 0,
         "active_channel": None,
+        "channels": {
+            "linkedin": {"status": "pending", "candidate_count": 0},
+            "exa": {"status": "pending", "candidate_count": 0},
+        },
     }
     with Session(engine) as session:
         assert session.exec(select(SearchResult)).all() == []
@@ -314,7 +318,7 @@ def test_search_requires_real_config_for_linkedin_channel(
     response = run_created_search(client, response)
     assert response.status_code == 200
     assert response.json()["status"] == "failed"
-    assert "linkedin channel requires" in response.json()["progress"]["error_message"].casefold()
+    assert response.json()["progress"]["error_message"] == "All selected search channels failed"
 
 
 def test_search_marks_run_failed_when_connector_raises(
@@ -343,11 +347,15 @@ def test_search_marks_run_failed_when_connector_raises(
     response = run_created_search(client, response)
     assert response.status_code == 200
     assert response.json()["status"] == "failed"
-    assert response.json()["progress"]["error_message"] == "connector unavailable"
+    assert response.json()["progress"]["error_message"] == "All selected search channels failed"
     with Session(engine) as session:
         search_run = session.exec(select(SearchRun)).one()
     assert search_run.status == "failed"
-    assert search_run.run_metadata["progress"]["error_message"] == "connector unavailable"
+    assert search_run.run_metadata["progress"]["error_message"] == "All selected search channels failed"
+    assert search_run.run_metadata["diagnostics"]["channels"]["linkedin"] == {
+        "error_type": "RuntimeError",
+        "message": "connector unavailable",
+    }
 
 
 def test_search_continues_after_a_channel_failure_and_persists_diagnostics(
@@ -393,9 +401,11 @@ def test_search_continues_after_a_channel_failure_and_persists_diagnostics(
     assert response.json()["status"] == "completed"
     assert response.json()["candidate_count"] == 1
     assert response.json()["progress"]["completed_channels"] == 2
-    assert response.json()["progress"]["channel_errors"] == {
-        "linkedin": "LinkedIn upstream unavailable"
+    assert response.json()["progress"]["channels"] == {
+        "linkedin": {"status": "failed", "candidate_count": 0},
+        "github": {"status": "completed", "candidate_count": 1},
     }
+    assert "channel_errors" not in response.json()["progress"]
 
 
 def test_search_is_blocked_on_vercel_without_durable_storage(
@@ -466,7 +476,7 @@ def test_search_deduplicates_connector_results_by_canonical_profile_url(
     data = response.json()
     assert len(data["candidates"]) == 1
     assert data["candidates"][0]["profile_url"] == (
-        "https://www.linkedin.com/in/example-profile"
+        "https://linkedin.com/in/example-profile"
     )
 
     with Session(engine) as session:
@@ -532,7 +542,7 @@ def test_mark_search_failed_ignores_missing_search_run(engine: Engine):
     from app.api.search import mark_search_failed
 
     with Session(engine) as session:
-        mark_search_failed(session, "search_run_missing", "missing")
+        mark_search_failed(session, "search_run_missing", {"worker": RuntimeError("missing")})
 
     with Session(engine) as session:
         assert session.exec(select(SearchRun)).all() == []
@@ -558,11 +568,195 @@ def test_search_marks_run_failed_when_persistence_fails(
     response = run_created_search(client, response)
     assert response.status_code == 200
     assert response.json()["status"] == "failed"
-    assert response.json()["progress"]["error_message"] == "candidate persistence failed"
+    assert response.json()["progress"]["error_message"] == "All selected search channels failed"
     with Session(engine) as session:
         search_run = session.exec(select(SearchRun)).one()
     assert search_run.status == "failed"
-    assert search_run.run_metadata["progress"]["error_message"] == "candidate persistence failed"
+    assert search_run.run_metadata["progress"]["error_message"] == "All selected search channels failed"
+
+
+def test_search_deduplicates_cross_channel_identity_and_url_variants(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    class CrossChannelDuplicateConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            channel = params["channels"][0]
+            if channel == "linkedin":
+                return [
+                    CandidateSourceResult(
+                        profile_url="http://www.linkedin.com/in/ada-lovelace/?trk=search",
+                        profile_source="linkedin",
+                        name="Ada Lovelace",
+                        headline="Product marketing leader",
+                        location="San Francisco, CA",
+                        current_company="ExampleCo",
+                        current_title="VP Product Marketing",
+                        raw={"channel": channel},
+                    )
+                ]
+            if channel == "exa":
+                return [
+                    CandidateSourceResult(
+                        profile_url="https://linkedin.com/in/ADA-LOVELACE",
+                        profile_source="exa",
+                        name="Ada Lovelace",
+                        headline="Product marketing leader",
+                        location="San Francisco, CA",
+                        current_company="ExampleCo",
+                        current_title="VP Product Marketing",
+                        raw={"channel": channel},
+                    )
+                ]
+            return [
+                CandidateSourceResult(
+                    profile_url="https://github.com/ada-lovelace",
+                    profile_source="github",
+                    name=" ADA  LOVELACE ",
+                    headline="Product marketing leader",
+                    location="San Francisco, CA",
+                    current_company=" exampleco ",
+                    current_title="VP Product Marketing",
+                    raw={"channel": channel},
+                ),
+                CandidateSourceResult(
+                    profile_url="https://github.com/grace-hopper",
+                    profile_source="github",
+                    name="Grace Hopper",
+                    headline="Technical product leader",
+                    location="San Francisco, CA",
+                    current_company="OtherCo",
+                    current_title="Product Lead",
+                    raw={"channel": channel},
+                ),
+            ]
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: CrossChannelDuplicateConnector())
+
+    response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "product marketing leader",
+            "channels": ["linkedin", "exa", "github"],
+            "params": {"limit": 5},
+        },
+    )
+    response = run_created_search(client, response)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["candidate_count"] == len(data["candidates"]) == 2
+    assert data["progress"]["channels"] == {
+        "linkedin": {"status": "completed", "candidate_count": 1},
+        "exa": {"status": "completed", "candidate_count": 0},
+        "github": {"status": "completed", "candidate_count": 1},
+    }
+    with Session(engine) as session:
+        saved_results = session.exec(select(SearchResult)).all()
+    assert len(saved_results) == data["candidate_count"]
+
+
+def test_search_keeps_channel_errors_out_of_hr_progress(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    class ChannelFailureConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            channel = params["channels"][0]
+            if channel == "github":
+                raise RuntimeError("422 Unprocessable Entity: https://api.github.com/search/users")
+            return []
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: ChannelFailureConnector())
+    response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "product marketing leader",
+            "channels": ["linkedin", "github"],
+        },
+    )
+    response = run_created_search(client, response)
+
+    assert response.status_code == 200
+    progress = response.json()["progress"]
+    assert progress["channels"]["linkedin"] == {"status": "completed", "candidate_count": 0}
+    assert progress["channels"]["github"] == {"status": "failed", "candidate_count": 0}
+    assert "channel_errors" not in progress
+    assert "422" not in str(progress)
+    with Session(engine) as session:
+        search_run = session.exec(select(SearchRun)).one()
+    assert search_run.run_metadata["diagnostics"]["channels"]["github"]["message"].startswith("422")
+
+
+def test_search_preserves_saved_count_when_a_channel_fails_after_a_result(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    from app.api import search
+
+    real_upsert = search.upsert_candidate
+
+    class OneResultConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            return [
+                CandidateSourceResult(
+                    profile_url="https://github.com/saved-before-failure",
+                    profile_source="github",
+                    name="Saved Before Failure",
+                    headline="Product leader",
+                    location="San Francisco, CA",
+                    current_company="ExampleCo",
+                    current_title="Product Lead",
+                    raw={},
+                ),
+                CandidateSourceResult(
+                    profile_url="https://github.com/fails-on-write",
+                    profile_source="github",
+                    name="Fails On Write",
+                    headline="Product leader",
+                    location="San Francisco, CA",
+                    current_company="ExampleCo",
+                    current_title="Product Lead",
+                    raw={},
+                ),
+            ]
+
+    calls = 0
+
+    def fail_second_upsert(session, result):  # noqa: ANN001, ANN202
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("second write failed")
+        return real_upsert(session, result)
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: OneResultConnector())
+    monkeypatch.setattr(search, "upsert_candidate", fail_second_upsert)
+    response = client.post(
+        "/api/search",
+        json={"job_id": job_id, "query": "product leader", "channels": ["github"]},
+    )
+    response = run_created_search(client, response)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["candidate_count"] == len(data["candidates"]) == 1
+    assert data["progress"]["channels"]["github"] == {
+        "status": "failed",
+        "candidate_count": 1,
+    }
+    with Session(engine) as session:
+        assert len(session.exec(select(SearchResult)).all()) == 1
 
 
 def test_json_safe_value_converts_unknown_objects_to_string():
