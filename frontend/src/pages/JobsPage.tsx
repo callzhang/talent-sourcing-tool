@@ -157,7 +157,7 @@ export function JobsPage({
               type="button"
               className="list-row"
               aria-pressed={job.id === selectedJobId}
-              onClick={() => onSelectJob(job.id)}
+              onClick={() => selectJob(job.id)}
             >
               <strong>{job.title}</strong>
             </button>
@@ -220,6 +220,14 @@ export function JobsPage({
     setRedFlags("");
     setSearchNotes("");
     setSearchChannels(["linkedin", "github", "exa", "brightdata_discover"]);
+  }
+
+  function selectJob(jobId: string) {
+    // Effects run after paint. Clear synchronously from the click so the old
+    // job cannot remain visible beside the newly selected list item.
+    setIsCreating(false);
+    setActiveJob(null);
+    onSelectJob(jobId);
   }
 }
 

@@ -23,6 +23,7 @@ export function CandidatesPage({
   onReviewCandidate
 }: CandidatesPageProps) {
   const [status, setStatus] = useState("正在加载已搜索候选人...");
+  const [isLoadingCandidates, setIsLoadingCandidates] = useState(false);
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
   const searchBlockedByStorage =
     systemStatus?.environment === "vercel" &&
@@ -39,9 +40,11 @@ export function CandidatesPage({
   useEffect(() => {
     if (!selectedJobId) {
       setStatus("请先选择岗位再查看候选人。");
+      setIsLoadingCandidates(false);
       return;
     }
     let ignore = false;
+    setIsLoadingCandidates(true);
     api
       .listCandidates(selectedJobId)
       .then(async (loadedCandidates) => {
@@ -69,6 +72,11 @@ export function CandidatesPage({
       .catch((error: unknown) => {
         if (!ignore) {
           setStatus(error instanceof Error ? error.message : "无法加载候选人。");
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoadingCandidates(false);
         }
       });
     return () => {
@@ -103,6 +111,7 @@ export function CandidatesPage({
           </p>
         ) : null}
         <div className="candidate-list">
+          {isLoadingCandidates ? <CandidateListSkeleton /> : null}
           {candidates.map((candidate) => (
             <button
               key={candidate.id}
@@ -128,6 +137,16 @@ export function CandidatesPage({
         <p className="section-kicker">当前候选人</p>
         <CandidateDetail candidate={activeCandidate} onReviewCandidate={onReviewCandidate} />
       </section>
+    </div>
+  );
+}
+
+function CandidateListSkeleton() {
+  return (
+    <div className="candidate-list-skeleton" aria-label="候选人正在加载">
+      <span />
+      <span />
+      <span />
     </div>
   );
 }

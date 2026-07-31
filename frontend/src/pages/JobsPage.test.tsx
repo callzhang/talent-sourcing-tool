@@ -235,6 +235,37 @@ it("selects a listed job when the user clicks it", async () => {
   expect(onSelectJob).toHaveBeenCalledWith("job_1");
 });
 
+it("clears stale job detail as soon as another listing is selected", async () => {
+  let resolveSecondJob: (response: Response) => void = () => undefined;
+  const secondJob = { ...job, id: "job_2", title: "Second role" };
+  vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+    const url = String(input);
+    if (url.endsWith("/api/jobs")) {
+      return jsonResponse([job, secondJob]);
+    }
+    if (url.endsWith("/api/jobs/job_1")) {
+      return jsonResponse(jobWithRubric);
+    }
+    return new Promise<Response>((resolve) => {
+      resolveSecondJob = resolve;
+    });
+  });
+
+  const { rerender } = render(
+    <JobsPage selectedJobId="job_1" onSelectJob={() => undefined} onCreatedJob={() => undefined} />
+  );
+  expect(await screen.findByText("Founder-market judgment")).toBeInTheDocument();
+
+  rerender(
+    <JobsPage selectedJobId="job_2" onSelectJob={() => undefined} onCreatedJob={() => undefined} />
+  );
+  expect(await screen.findByText("正在加载岗位详情...")).toBeInTheDocument();
+  expect(screen.queryByText("Founder-market judgment")).not.toBeInTheDocument();
+
+  resolveSecondJob(await jsonResponse({ ...jobWithRubric, job: secondJob }));
+  expect(await screen.findByText("Second role")).toBeInTheDocument();
+});
+
 it("keeps the detail pane empty until New Job is chosen when no job is selected", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);

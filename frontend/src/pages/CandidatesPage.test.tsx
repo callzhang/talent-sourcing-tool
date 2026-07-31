@@ -222,6 +222,27 @@ it("ignores candidate loads that resolve after unmount", async () => {
   expect(onLoadedCandidates).not.toHaveBeenCalled();
 });
 
+it("shows an immediate queue placeholder while candidates are loading", () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    () => new Promise<Response>(() => undefined)
+  );
+
+  render(
+    <CandidatesPage
+      selectedJobId="job_1"
+      jobs={[job]}
+      candidates={[]}
+      systemStatus={null}
+      onSelectJob={() => undefined}
+      onLoadedCandidates={() => undefined}
+      onReviewCandidate={() => undefined}
+    />
+  );
+
+  expect(screen.getByLabelText("候选人正在加载")).toBeInTheDocument();
+  expect(screen.getByText("正在加载已搜索候选人...")).toBeInTheDocument();
+});
+
 it("lets the user switch the JD used by the candidate queue", async () => {
   const onSelectJob = vi.fn();
   vi.spyOn(globalThis, "fetch").mockImplementation(() => jsonResponse([]));
