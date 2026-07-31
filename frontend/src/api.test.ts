@@ -87,6 +87,7 @@ it("exposes read endpoints needed by the task pages", async () => {
   );
 
   await api.getJob("job_1");
+  await api.deleteJob("job_1");
   await api.listSearchRuns("job_1");
   await api.getSearchRun("search_run_1");
   await api.listCandidates("job_1");
@@ -98,32 +99,36 @@ it("exposes read endpoints needed by the task pages", async () => {
   expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/jobs/job_1", {
     headers: { "Content-Type": "application/json" }
   });
-  expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/search?job_id=job_1", {
+  expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/jobs/job_1", {
+    method: "DELETE",
     headers: { "Content-Type": "application/json" }
   });
-  expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/search/search_run_1", {
+  expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/search?job_id=job_1", {
+    headers: { "Content-Type": "application/json" }
+  });
+  expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/search/search_run_1", {
     headers: { "Content-Type": "application/json" }
   });
   expect(fetchMock).toHaveBeenNthCalledWith(
-    4,
+    5,
     "/api/candidates?job_id=job_1",
     { headers: { "Content-Type": "application/json" } }
   );
   expect(fetchMock).toHaveBeenNthCalledWith(
-    5,
+    6,
     "/api/candidates/candidate_1?job_id=job_1",
     { headers: { "Content-Type": "application/json" } }
   );
   expect(fetchMock).toHaveBeenNthCalledWith(
-    6,
+    7,
     "/api/reviews/latest?job_id=job_1&candidate_id=candidate_1",
     { headers: { "Content-Type": "application/json" } }
   );
-  expect(fetchMock).toHaveBeenNthCalledWith(7, "/api/reviews/jobs/review_job_1/run", {
+  expect(fetchMock).toHaveBeenNthCalledWith(8, "/api/reviews/jobs/review_job_1/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" }
   });
-  expect(fetchMock).toHaveBeenNthCalledWith(8, "/api/system/status", {
+  expect(fetchMock).toHaveBeenNthCalledWith(9, "/api/system/status", {
     headers: { "Content-Type": "application/json" }
   });
 });

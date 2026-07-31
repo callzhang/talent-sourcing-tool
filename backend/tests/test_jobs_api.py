@@ -7,7 +7,19 @@ from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, select
 
 from app.api import jobs
-from app.db.models import Job, Rubric
+from app.db.models import (
+    Candidate,
+    CandidateDecision,
+    Job,
+    PassReason,
+    RefinementSuggestion,
+    Review,
+    ReviewJob,
+    Rubric,
+    SearchResult,
+    SearchRun,
+    UserFeedback,
+)
 from app.db.session import create_db_engine, get_session
 from app.main import app
 
@@ -313,3 +325,103 @@ def test_get_job_404s_when_rubric_missing(client: TestClient, engine: Engine):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Rubric not found"
+
+
+def test_delete_job_removes_owned_records_and_preserves_shared_candidates(
+    client: TestClient, engine: Engine
+):
+    with Session(engine) as session:
+        job = Job(title="E2E HR Flow", description="Temporary production test job")
+        other_job = Job(title="Keep me", description="Unrelated job")
+        candidate = Candidate(
+            profile_url="https://www.linkedin.com/in/shared-candidate",
+            name="Shared Candidate",
+        )
+        session.add_all([job, other_job, candidate])
+        session.flush()
+
+        rubric = Rubric(job_id=job.id, name="Temporary rubric")
+        search_run = SearchRun(job_id=job.id, query="temporary search")
+        review_job = ReviewJob(job_id=job.id, candidate_id=candidate.id)
+        session.add_all([rubric, search_run, review_job])
+        session.flush()
+
+        search_result = SearchResult(
+            search_run_id=search_run.id,
+            candidate_id=candidate.id,
+            profile_url=candidate.profile_url,
+        )
+        review = Review(
+            review_job_id=review_job.id,
+            summary="Temporary review",
+            recommendation="pass",
+        )
+        session.add_all([search_result, review])
+        session.flush()
+
+        decision = CandidateDecision(
+            job_id=job.id,
+            candidate_id=candidate.id,
+            review_id=review.id,
+            decision="pass",
+        )
+        session.add(decision)
+        session.flush()
+
+        pass_reason = PassReason(
+            candidate_decision_id=decision.id,
+            reason_code="temporary",
+            reason_text="Temporary reason",
+        )
+        feedback = UserFeedback(
+            job_id=job.id,
+            candidate_id=candidate.id,
+            candidate_decision_id=decision.id,
+            feedback_type="temporary",
+            feedback_text="Temporary feedback",
+        )
+        refinement = RefinementSuggestion(
+            job_id=job.id,
+            pass_reason_id=pass_reason.id,
+            suggestion_type="temporary",
+            suggestion_text="Temporary refinement",
+        )
+        unrelated_feedback = UserFeedback(
+            job_id=other_job.id,
+            candidate_id=candidate.id,
+            feedback_type="keep",
+            feedback_text="Unrelated feedback",
+        )
+        session.add_all([pass_reason, feedback, refinement, unrelated_feedback])
+        session.commit()
+
+        job_id = job.id
+        candidate_id = candidate.id
+        other_job_id = other_job.id
+
+    response = client.delete(f"/api/jobs/{job_id}")
+
+    assert response.status_code == 204
+    assert client.get(f"/api/jobs/{job_id}").status_code == 404
+
+    with Session(engine) as session:
+        assert session.get(Candidate, candidate_id) is not None
+        assert session.get(Job, other_job_id) is not None
+        assert session.exec(select(Rubric).where(Rubric.job_id == job_id)).all() == []
+        assert session.exec(select(SearchRun).where(SearchRun.job_id == job_id)).all() == []
+        assert session.exec(select(SearchResult)).all() == []
+        assert session.exec(select(ReviewJob).where(ReviewJob.job_id == job_id)).all() == []
+        assert session.exec(select(Review)).all() == []
+        assert session.exec(select(CandidateDecision).where(CandidateDecision.job_id == job_id)).all() == []
+        assert session.exec(select(PassReason)).all() == []
+        assert session.exec(select(RefinementSuggestion).where(RefinementSuggestion.job_id == job_id)).all() == []
+        assert [feedback.feedback_text for feedback in session.exec(select(UserFeedback)).all()] == [
+            "Unrelated feedback"
+        ]
+
+
+def test_delete_job_404s_for_missing_job(client: TestClient):
+    response = client.delete("/api/jobs/job_missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Job not found"

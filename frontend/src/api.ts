@@ -131,6 +131,9 @@ export const api = {
   getJob(jobId: string) {
     return request<JobWithRubric>(`/api/jobs/${encodeURIComponent(jobId)}`);
   },
+  deleteJob(jobId: string) {
+    return request<void>(`/api/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
+  },
   createSearch(payload: CreateSearchPayload) {
     return request<SearchRun>("/api/search", { method: "POST", body: payload });
   },

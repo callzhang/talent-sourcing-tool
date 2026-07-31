@@ -3,10 +3,22 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete
 from sqlmodel import Session, select
 
 from app.core.deployment_guard import require_persistent_storage_for_writes
-from app.db.models import Job, Rubric
+from app.db.models import (
+    CandidateDecision,
+    Job,
+    PassReason,
+    RefinementSuggestion,
+    Review,
+    ReviewJob,
+    Rubric,
+    SearchResult,
+    SearchRun,
+    UserFeedback,
+)
 from app.db.session import get_session
 from app.schemas import JobCreate, JobRead, JobWithRubric, RubricRead
 from app.services.job_titles import job_title_key, normalize_job_title
@@ -105,3 +117,45 @@ def get_job(job_id: str, session: Session = Depends(get_session)) -> JobWithRubr
         raise HTTPException(status_code=404, detail="Rubric not found")
 
     return JobWithRubric(job=read_job(job), rubric=read_rubric(rubric))
+
+
+@router.delete("/{job_id}", status_code=204)
+def delete_job(job_id: str, session: Session = Depends(get_session)) -> None:
+    """Remove a job and records owned by that job, retaining shared candidates."""
+    require_persistent_storage_for_writes()
+
+    with session.begin():
+        if session.get(Job, job_id) is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        decision_ids = session.exec(
+            select(CandidateDecision.id).where(CandidateDecision.job_id == job_id)
+        ).all()
+        pass_reason_ids = (
+            session.exec(
+                select(PassReason.id).where(PassReason.candidate_decision_id.in_(decision_ids))
+            ).all()
+            if decision_ids
+            else []
+        )
+        review_job_ids = session.exec(
+            select(ReviewJob.id).where(ReviewJob.job_id == job_id)
+        ).all()
+        search_run_ids = session.exec(
+            select(SearchRun.id).where(SearchRun.job_id == job_id)
+        ).all()
+
+        session.exec(delete(UserFeedback).where(UserFeedback.job_id == job_id))
+        session.exec(delete(RefinementSuggestion).where(RefinementSuggestion.job_id == job_id))
+        if pass_reason_ids:
+            session.exec(delete(PassReason).where(PassReason.id.in_(pass_reason_ids)))
+        if decision_ids:
+            session.exec(delete(CandidateDecision).where(CandidateDecision.id.in_(decision_ids)))
+        if review_job_ids:
+            session.exec(delete(Review).where(Review.review_job_id.in_(review_job_ids)))
+            session.exec(delete(ReviewJob).where(ReviewJob.id.in_(review_job_ids)))
+        if search_run_ids:
+            session.exec(delete(SearchResult).where(SearchResult.search_run_id.in_(search_run_ids)))
+            session.exec(delete(SearchRun).where(SearchRun.id.in_(search_run_ids)))
+        session.exec(delete(Rubric).where(Rubric.job_id == job_id))
+        session.exec(delete(Job).where(Job.id == job_id))

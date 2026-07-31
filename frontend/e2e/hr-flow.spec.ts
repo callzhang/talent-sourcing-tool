@@ -2,6 +2,25 @@ import { expect, test, type Page } from "@playwright/test";
 
 test("HR flow: create job, search candidate, review, and submit decision", async ({ page }) => {
   const jobTitle = `E2E HR Flow ${Date.now()}`;
+  let jobId: string | undefined;
+
+  try {
+    await runHrFlow(page, jobTitle, (createdJobId) => {
+      jobId = createdJobId;
+    });
+  } finally {
+    if (jobId) {
+      const cleanupResponse = await page.request.delete(`/api/jobs/${encodeURIComponent(jobId)}`);
+      expect(cleanupResponse.status()).toBe(204);
+    }
+  }
+});
+
+async function runHrFlow(
+  page: Page,
+  jobTitle: string,
+  onJobCreated: (jobId: string) => void
+) {
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "岗位列表" })).toBeVisible();
@@ -28,7 +47,16 @@ test("HR flow: create job, search candidate, review, and submit decision", async
   await setChannel(page, "Bright Data Discover", false);
   await setChannel(page, "OpenReview", true);
 
+  const createJobResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/jobs") &&
+      response.request().method() === "POST" &&
+      response.ok()
+  );
   await page.getByRole("button", { name: "保存岗位", exact: true }).click();
+  const createdJob = await createJobResponse;
+  const createdJobBody = await createdJob.json();
+  onJobCreated(createdJobBody.job.id);
   await expect(page.getByRole("heading", { name: jobTitle })).toBeVisible();
   await expect(page.getByText("OpenReview")).toBeVisible();
 
