@@ -11,9 +11,11 @@ export default defineConfig({
     // requesting an asset that no longer exists in the current deployment.
     rollupOptions: {
       output: {
-        entryFileNames: "assets/app.js",
+        // v2 invalidates the original immutable app.js response already held
+        // by existing browsers. Future stable entry assets revalidate on load.
+        entryFileNames: "assets/app-v2.js",
         chunkFileNames: "assets/chunk-[name].js",
-        assetFileNames: "assets/[name][extname]",
+        assetFileNames: "assets/[name]-v2[extname]",
       },
     },
   },
