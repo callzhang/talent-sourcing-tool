@@ -5,6 +5,18 @@ const backendProxyTarget = process.env.BACKEND_PROXY_TARGET ?? "http://127.0.0.1
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // The production alias can briefly serve a previous HTML document during a
+    // deployment transition. Stable entry names prevent that document from
+    // requesting an asset that no longer exists in the current deployment.
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/app.js",
+        chunkFileNames: "assets/chunk-[name].js",
+        assetFileNames: "assets/[name][extname]",
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": {
