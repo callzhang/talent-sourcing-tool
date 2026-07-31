@@ -97,7 +97,11 @@ export function JobsPage({
     };
   }, [selectedJobId]);
 
-  const isLoadingSelectedJob = selectedJobId !== null && activeJob === null && !isCreating;
+  // A parent selection update and the detail fetch are independent. Only show
+  // data whose job id matches the current selection; otherwise the two panes
+  // can briefly describe different roles.
+  const displayedJob = activeJob?.job.id === selectedJobId ? activeJob : null;
+  const isLoadingSelectedJob = selectedJobId !== null && displayedJob === null && !isCreating;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -194,12 +198,12 @@ export function JobsPage({
           <>
             <p className="section-kicker">当前评分标准</p>
             <div className="split-heading">
-              <h3>{isLoadingSelectedJob ? "正在加载岗位详情..." : activeJob?.job.title ?? "未选择岗位"}</h3>
-              {activeJob ? <span>{`v${activeJob.rubric.version}`}</span> : null}
+              <h3>{isLoadingSelectedJob ? "正在加载岗位详情..." : displayedJob?.job.title ?? "未选择岗位"}</h3>
+              {displayedJob ? <span>{`v${displayedJob.rubric.version}`}</span> : null}
             </div>
             {isLoadingSelectedJob ? <p className="empty-state">正在加载评分标准。</p> : null}
-            {!isLoadingSelectedJob ? <JobDetail job={activeJob} /> : null}
-            {!isLoadingSelectedJob ? <RubricPreview job={activeJob} /> : null}
+            {!isLoadingSelectedJob ? <JobDetail job={displayedJob} /> : null}
+            {!isLoadingSelectedJob ? <RubricPreview job={displayedJob} /> : null}
           </>
         )}
       </section>
