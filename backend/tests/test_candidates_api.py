@@ -100,6 +100,41 @@ def test_candidate_responses_include_the_latest_decision_for_the_selected_job(
         assert candidate["latest_decision"]["notes"] == "安排招聘负责人面试。"
 
 
+def test_list_candidates_uses_the_latest_search_result_for_each_candidate(
+    client: TestClient, engine: Engine
+):
+    job_id, candidate_id, _unsearched_candidate_id = seed_candidates(engine)
+    with Session(engine) as session:
+        latest_run = SearchRun(
+            job_id=job_id,
+            query="AI product marketing leader",
+            provider="exa",
+            status="completed",
+            run_metadata={},
+        )
+        session.add(latest_run)
+        session.commit()
+        session.refresh(latest_run)
+        session.add(
+            SearchResult(
+                search_run_id=latest_run.id,
+                candidate_id=candidate_id,
+                profile_url="https://www.linkedin.com/in/searched",
+                title="AI PMM Lead",
+                snippet="latest result",
+                rank=3,
+                raw_data={},
+            )
+        )
+        session.commit()
+
+    response = client.get(f"/api/candidates?job_id={job_id}")
+
+    assert response.status_code == 200
+    assert response.json()[0]["last_search_query"] == "AI product marketing leader"
+    assert response.json()[0]["last_search_rank"] == 3
+
+
 def test_get_candidate_404s_for_missing_candidate(client: TestClient):
     response = client.get("/api/candidates/candidate_missing")
 

@@ -75,6 +75,9 @@ export function JobsPage({
       setActiveJob(null);
       return;
     }
+    // Clear the old detail before requesting the next job so a selection never
+    // appears to show the wrong role while the network request is in flight.
+    setActiveJob(null);
     let ignore = false;
     api
       .getJob(selectedJobId)
@@ -93,6 +96,8 @@ export function JobsPage({
       ignore = true;
     };
   }, [selectedJobId]);
+
+  const isLoadingSelectedJob = selectedJobId !== null && activeJob === null && !isCreating;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -189,11 +194,12 @@ export function JobsPage({
           <>
             <p className="section-kicker">当前评分标准</p>
             <div className="split-heading">
-              <h3>{activeJob?.job.title ?? "未选择岗位"}</h3>
+              <h3>{isLoadingSelectedJob ? "正在加载岗位详情..." : activeJob?.job.title ?? "未选择岗位"}</h3>
               {activeJob ? <span>{`v${activeJob.rubric.version}`}</span> : null}
             </div>
-            <JobDetail job={activeJob} />
-            <RubricPreview job={activeJob} />
+            {isLoadingSelectedJob ? <p className="empty-state">正在加载评分标准。</p> : null}
+            {!isLoadingSelectedJob ? <JobDetail job={activeJob} /> : null}
+            {!isLoadingSelectedJob ? <RubricPreview job={activeJob} /> : null}
           </>
         )}
       </section>
