@@ -880,6 +880,7 @@ def test_brightdata_search_parses_google_html_from_request_api_response():
     assert client.request_json["zone"] == "mcp_unlocker"
     assert client.request_json["country"] == "us"
     assert client.request_json["format"] == "raw"
+    assert "site%3Alinkedin.com%2Fin" in client.request_json["url"]
     assert len(results) == 1
     assert results[0].profile_url == "https://www.linkedin.com/in/example-pmm"
     assert results[0].profile_source == "brightdata_discover"
@@ -912,6 +913,13 @@ def test_brightdata_search_rejects_upstream_error_instead_of_returning_empty_res
             "founding product marketing",
             {"channels": ["brightdata_discover"], "limit": 1},
         )
+
+
+def test_brightdata_discover_filters_non_profile_result_urls():
+    from app.services.sourcing import is_linkedin_profile_url
+
+    assert is_linkedin_profile_url("https://www.linkedin.com/in/example-pmm")
+    assert not is_linkedin_profile_url("https://instagram.com/reel/example")
 
 
 def test_canonical_profile_url_preserves_query_for_non_linkedin_profiles():

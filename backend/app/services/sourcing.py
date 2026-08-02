@@ -5,7 +5,7 @@ from datetime import UTC
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 import json
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import parse_qs, quote_plus, urlencode, urlsplit, urlunsplit
 from xml.etree import ElementTree
 
@@ -330,14 +330,20 @@ class LiveSourcingConnector:
                 "and TALENT_BRIGHTDATA_ZONE/BRIGHTDATA_ZONE"
             )
         return self._search_brightdata_serp(
-            query=regionalized_query(query, region),
+            query=f"site:linkedin.com/in {regionalized_query(query, region)}",
             limit=limit,
             region=region,
             channel="brightdata_discover",
+            candidate_url_filter=is_linkedin_profile_url,
         )
 
     def _search_brightdata_serp(
-        self, query: str, limit: int, region: str, channel: str
+        self,
+        query: str,
+        limit: int,
+        region: str,
+        channel: str,
+        candidate_url_filter: Callable[[str], bool] | None = None,
     ) -> list[CandidateSourceResult]:
         response = self.client.post(
             "https://api.brightdata.com/request",
@@ -360,7 +366,10 @@ class LiveSourcingConnector:
         if response.headers.get("x-brd-error") or response.headers.get("x-brd-err-code"):
             raise SourcingConfigError("Bright Data request was rejected by the selected zone.")
         organic = brightdata_organic_results(response.text)
-        return serp_results_to_candidates(organic, query, region, channel)[:limit]
+        candidates = serp_results_to_candidates(organic, query, region, channel)
+        if candidate_url_filter is not None:
+            candidates = [candidate for candidate in candidates if candidate_url_filter(candidate.profile_url)]
+        return candidates[:limit]
 
 
 def normalize_search_channels(channels: list[str] | tuple[str, ...] | Any) -> list[str]:
@@ -480,6 +489,12 @@ def serp_results_to_candidates(
             )
         )
     return candidates
+
+
+def is_linkedin_profile_url(url: str) -> bool:
+    parsed = urlsplit(url)
+    hostname = parsed.hostname.casefold() if parsed.hostname else ""
+    return hostname.endswith("linkedin.com") and parsed.path.startswith("/in/")
 
 
 def brightdata_organic_results(payload: Any) -> list[dict[str, Any]]:
