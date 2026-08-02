@@ -93,17 +93,21 @@ class LiveSourcingConnector:
         raise SourcingConfigError(f"Unsupported search channel: {channel}")
 
     def _search_github(self, query: str, limit: int, region: str) -> list[CandidateSourceResult]:
-        search_query = query
         github_region = github_location_query(region)
-        if github_region:
-            search_query = f'{query} location:"{github_region}"'
-        response = self.client.get(
-            "https://api.github.com/search/users",
-            params={"q": search_query, "per_page": limit},
-            headers={"Accept": "application/vnd.github+json"},
-        )
-        response.raise_for_status()
-        items = response.json().get("items", [])
+        items: list[dict[str, Any]] = []
+        for search_query in search_query_variants(query):
+            if github_region:
+                search_query = f'{search_query} location:"{github_region}"'
+            response = self.client.get(
+                "https://api.github.com/search/users",
+                params={"q": search_query, "per_page": limit},
+                headers={"Accept": "application/vnd.github+json"},
+            )
+            response.raise_for_status()
+            response_items = response.json().get("items", [])
+            if isinstance(response_items, list) and response_items:
+                items = [item for item in response_items if isinstance(item, dict)]
+                break
 
         results: list[CandidateSourceResult] = []
         for item in items[:limit]:
@@ -341,14 +345,21 @@ class LiveSourcingConnector:
             json={
                 "zone": self.settings.brightdata_zone.strip(),
                 "url": f"https://www.google.com/search?q={quote_plus(query)}&hl=en&gl=us",
-                "format": "json",
+                "format": "raw",
                 "method": "GET",
                 "country": "us",
             },
         )
         response.raise_for_status()
-        payload = response.json()
-        organic = brightdata_organic_results(payload)
+        upstream_status = response.headers.get("x-brd-status-code")
+        if upstream_status and upstream_status.isdigit() and int(upstream_status) >= 400:
+            raise SourcingConfigError(
+                f"Bright Data request failed with upstream status {upstream_status}. "
+                "Check the selected zone access settings."
+            )
+        if response.headers.get("x-brd-error") or response.headers.get("x-brd-err-code"):
+            raise SourcingConfigError("Bright Data request was rejected by the selected zone.")
+        organic = brightdata_organic_results(response.text)
         return serp_results_to_candidates(organic, query, region, channel)[:limit]
 
 
@@ -472,6 +483,8 @@ def serp_results_to_candidates(
 
 
 def brightdata_organic_results(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, str):
+        return google_html_to_organic_results(payload)
     if not isinstance(payload, dict):
         raise SourcingConfigError("Bright Data returned an unsupported response payload.")
 
@@ -610,6 +623,13 @@ def openreview_profile_url(name: str, author_ids: Any) -> str:
 
 def regionalized_query(query: str, region: str) -> str:
     return query if not region else f"{query} {region}"
+
+
+def search_query_variants(query: str) -> list[str]:
+    """Use complete search-note alternatives instead of one unsupported compound query."""
+    normalized = query.replace("；", ";").replace("\n", ";")
+    variants = [part.strip() for part in normalized.split(";") if part.strip()]
+    return variants[:3] or [query.strip()]
 
 
 def github_location_query(region: str) -> str:

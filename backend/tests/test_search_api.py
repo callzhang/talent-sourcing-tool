@@ -660,6 +660,55 @@ def test_search_deduplicates_cross_channel_identity_and_url_variants(
     assert len(saved_results) == data["candidate_count"]
 
 
+def test_search_reserves_a_result_for_each_channel_before_filling_the_total_limit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = create_job(client)
+
+    class MultiChannelConnector:
+        def search_people(self, query, params):  # noqa: ANN001, ANN202
+            channel = params["channels"][0]
+            return [
+                CandidateSourceResult(
+                    profile_url=f"https://example.com/{channel}/{index}",
+                    profile_source=channel,
+                    name=f"{channel} candidate {index}",
+                    headline="Relevant public profile",
+                    location="San Francisco, CA",
+                    current_company="ExampleCo",
+                    current_title="AI builder",
+                    raw={"channel": channel},
+                )
+                for index in range(3)
+            ]
+
+    from app.api import search
+
+    monkeypatch.setattr(search, "get_sourcing_connector", lambda: MultiChannelConnector())
+    response = client.post(
+        "/api/search",
+        json={
+            "job_id": job_id,
+            "query": "AI product engineer",
+            "channels": ["linkedin", "github", "openreview", "arxiv", "exa", "brightdata_discover"],
+            "params": {"limit": 6},
+        },
+    )
+
+    response = run_created_search(client, response)
+
+    assert response.status_code == 200
+    progress = response.json()["progress"]["channels"]
+    assert {channel: values["candidate_count"] for channel, values in progress.items()} == {
+        "linkedin": 1,
+        "github": 1,
+        "openreview": 1,
+        "arxiv": 1,
+        "exa": 1,
+        "brightdata_discover": 1,
+    }
+
+
 def test_search_keeps_channel_errors_out_of_hr_progress(
     client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
 ):
@@ -775,6 +824,16 @@ def test_github_location_query_uses_city_only():
     assert github_location_query("San Francisco, CA") == "San Francisco"
 
 
+def test_search_query_variants_split_job_search_notes_into_supported_queries():
+    from app.services.sourcing import search_query_variants
+
+    assert search_query_variants("founding engineer AI；agent workflow; AI prototyping") == [
+        "founding engineer AI",
+        "agent workflow",
+        "AI prototyping",
+    ]
+
+
 def test_live_sourcing_connector_ignores_proxy_environment():
     from app.services.sourcing import LiveSourcingConnector
 
@@ -793,17 +852,14 @@ def test_brightdata_search_parses_google_html_from_request_api_response():
         brightdata_zone = "mcp_unlocker"
 
     class FakeResponse:
+        headers = {"x-brd-status-code": "200"}
+        text = (
+            '<a href="/url?q=https://www.linkedin.com/in/example-pmm&sa=U">'
+            "<h3>Example PMM - AI Startup</h3></a>"
+        )
+
         def raise_for_status(self):  # noqa: ANN201
             return None
-
-        def json(self):  # noqa: ANN201
-            return {
-                "status_code": 200,
-                "body": (
-                    '<a href="/url?q=https://www.linkedin.com/in/example-pmm&sa=U">'
-                    "<h3>Example PMM - AI Startup</h3></a>"
-                ),
-            }
 
     class FakeClient:
         def __init__(self) -> None:
@@ -823,6 +879,7 @@ def test_brightdata_search_parses_google_html_from_request_api_response():
 
     assert client.request_json["zone"] == "mcp_unlocker"
     assert client.request_json["country"] == "us"
+    assert client.request_json["format"] == "raw"
     assert len(results) == 1
     assert results[0].profile_url == "https://www.linkedin.com/in/example-pmm"
     assert results[0].profile_source == "brightdata_discover"
@@ -838,11 +895,11 @@ def test_brightdata_search_rejects_upstream_error_instead_of_returning_empty_res
         brightdata_zone = "mcp_unlocker"
 
     class FakeResponse:
+        headers = {"x-brd-status-code": "401"}
+        text = ""
+
         def raise_for_status(self):  # noqa: ANN201
             return None
-
-        def json(self):  # noqa: ANN201
-            return {"status_code": 401, "headers": {"x-brd-err-msg": "sensitive detail"}}
 
     class FakeClient:
         def post(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201

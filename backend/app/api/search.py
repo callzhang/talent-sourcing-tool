@@ -147,6 +147,7 @@ def mark_search_failed(
     channel_errors: dict[str, Exception],
     *,
     error_message: str = "All selected search channels failed",
+    channel_progress: dict[str, dict[str, int | str]] | None = None,
 ) -> None:
     session.rollback()
     search_run = session.get(SearchRun, search_run_id)
@@ -162,6 +163,7 @@ def mark_search_failed(
             "stage": "failed",
             "active_channel": None,
             "error_message": error_message,
+            "channels": channel_progress or search_run_channel_progress(search_run),
         },
     }
     session.add(search_run)
@@ -378,14 +380,13 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
         return search_run
 
     try:
-        results: list[CandidateSourceResult] = []
-        seen_identities: set[str] = set()
         limit = max(int(search_run_params(search_run).get("limit", 10)), 1)
         channels = search_run_channels(search_run)
         channel_errors: dict[str, Exception] = {}
         channel_progress: dict[str, dict[str, int | str]] = {
             channel: {"status": "pending", "candidate_count": 0} for channel in channels
         }
+        collected_results: dict[str, list[CandidateSourceResult]] = {}
         connector = get_sourcing_connector()
         for index, channel in enumerate(channels, start=1):
             update_search_progress(
@@ -397,7 +398,6 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
                 channel_progress=channel_progress,
                 diagnostics=channel_diagnostics(channel_errors),
             )
-            channel_candidate_count = 0
             try:
                 channel_results = connector.search_people(
                     search_run.query,
@@ -406,41 +406,19 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
                         "channels": [channel],
                     },
                 )
-                for result in dedupe_results(channel_results):
-                    identity_keys = candidate_identity_keys(result)
-                    if identity_keys & seen_identities or len(results) >= limit:
-                        continue
-                    candidate = upsert_candidate(session, result)
-                    seen_identities.update(identity_keys)
-                    results.append(result)
-                    channel_candidate_count += 1
-                    session.add(
-                        SearchResult(
-                            search_run_id=search_run.id,
-                            candidate_id=candidate.id,
-                            profile_url=result.profile_url,
-                            title=result.current_title,
-                            snippet=result.headline,
-                            rank=len(results),
-                            raw_data={
-                                "normalized": candidate_payload(result),
-                                "raw": result.raw,
-                            },
-                        )
-                    )
-                    session.commit()
             except Exception as exc:
                 session.rollback()
                 channel_errors[channel] = exc
                 channel_progress[channel] = {
                     "status": "failed",
-                    "candidate_count": channel_candidate_count,
+                    "candidate_count": 0,
                 }
             else:
                 channel_progress[channel] = {
-                    "status": "completed",
-                    "candidate_count": channel_candidate_count,
+                    "status": "collected",
+                    "candidate_count": 0,
                 }
+                collected_results[channel] = dedupe_results(channel_results)
             update_search_progress(
                 session,
                 search_run,
@@ -451,11 +429,49 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
                 diagnostics=channel_diagnostics(channel_errors),
             )
 
-        if len(channel_errors) == len(channels):
+        selected_results = select_channel_results(collected_results, channels, limit)
+        for rank, (channel, result) in enumerate(selected_results, start=1):
+            try:
+                candidate = upsert_candidate(session, result)
+                session.add(
+                    SearchResult(
+                        search_run_id=search_run.id,
+                        candidate_id=candidate.id,
+                        profile_url=result.profile_url,
+                        title=result.current_title,
+                        snippet=result.headline,
+                        rank=rank,
+                        raw_data={
+                            "normalized": candidate_payload(result),
+                            "raw": result.raw,
+                        },
+                    )
+                )
+                session.commit()
+                channel_progress[channel]["candidate_count"] += 1
+            except Exception as exc:
+                session.rollback()
+                channel_errors[channel] = exc
+                channel_progress[channel] = {
+                    "status": "failed",
+                    "candidate_count": int(channel_progress[channel]["candidate_count"]),
+                }
+
+        for channel in channels:
+            if channel not in channel_errors:
+                channel_progress[channel]["status"] = "completed"
+
+        persisted_candidate_count = sum(
+            int(channel_progress[channel]["candidate_count"]) for channel in channels
+        )
+        if len(channel_errors) == len(channels) or (
+            channel_errors and persisted_candidate_count == 0
+        ):
             mark_search_failed(
                 session,
                 search_run.id,
                 channel_errors=channel_errors,
+                channel_progress=channel_progress,
             )
             refreshed_search_run = session.get(SearchRun, search_run.id)
             if refreshed_search_run is None:
@@ -483,6 +499,37 @@ def process_search_run(session: Session, search_run_id: str) -> SearchRun:
         if refreshed_search_run is None:
             raise HTTPException(status_code=404, detail="Search run not found") from exc
         return refreshed_search_run
+
+
+def select_channel_results(
+    collected_results: dict[str, list[CandidateSourceResult]],
+    channels: list[str],
+    limit: int,
+) -> list[tuple[str, CandidateSourceResult]]:
+    """Reserve one unique candidate per channel before filling the remaining cap."""
+    selected: list[tuple[str, CandidateSourceResult]] = []
+    seen_identities: set[str] = set()
+    positions = {channel: 0 for channel in channels}
+
+    while len(selected) < limit:
+        selected_in_round = False
+        for channel in channels:
+            candidates = collected_results.get(channel, [])
+            while positions[channel] < len(candidates):
+                candidate = candidates[positions[channel]]
+                positions[channel] += 1
+                identity_keys = candidate_identity_keys(candidate)
+                if identity_keys & seen_identities:
+                    continue
+                seen_identities.update(identity_keys)
+                selected.append((channel, candidate))
+                selected_in_round = True
+                break
+            if len(selected) >= limit:
+                break
+        if not selected_in_round:
+            break
+    return selected
 
 
 @router.post("", response_model=SearchRunRead)
